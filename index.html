@@ -1,0 +1,1413 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>TIME ETF 구성종목 트래커</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="data.js"></script>
+<script src="keys.js"></script>
+<style>
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  margin: 0; background: #f5f6f8; color: #1a1a1a;
+}
+header {
+  background: #fff; padding: 14px 24px;
+  border-bottom: 1px solid #e0e3e8;
+  position: sticky; top: 0; z-index: 10;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+header h1 { margin: 0 0 10px; font-size: 19px; }
+.controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.controls label { font-size: 13px; color: #555; display: flex; align-items: center; gap: 6px; }
+.controls input[type="date"] {
+  padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px;
+}
+.controls button {
+  padding: 6px 14px; background: #2a6df4; color: white;
+  border: none; border-radius: 4px; cursor: pointer; font-size: 13px;
+}
+.controls button:hover { background: #1d54c9; }
+.controls .preset {
+  padding: 4px 10px; background: #fff; color: #555;
+  border: 1px solid #ccc;
+}
+.controls .preset:hover { background: #eef3ff; border-color: #2a6df4; color: #2a6df4; }
+.meta { color: #888; font-size: 12px; margin-left: auto; }
+
+main { padding: 16px 24px; max-width: 1500px; margin: 0 auto; }
+section {
+  background: white; border: 1px solid #e0e3e8; border-radius: 6px;
+  padding: 16px 20px; margin-bottom: 16px;
+}
+section h2 { margin: 0 0 4px; font-size: 16px; color: #222; }
+section .desc { margin: 0 0 12px; color: #888; font-size: 12px; }
+
+.kpi-cards {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px; margin-bottom: 16px;
+}
+.kpi-card {
+  background: #fafbfc; border: 1px solid #e0e3e8; border-radius: 4px; padding: 12px;
+}
+.kpi-card .label { font-size: 12px; color: #777; }
+.kpi-card .value { font-size: 22px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.kpi-card .delta { font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.kpi-charts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.row { display: flex; gap: 16px; flex-wrap: wrap; }
+.row > * { flex: 1; min-width: 320px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+table th, table td { padding: 6px 10px; border-bottom: 1px solid #eee; text-align: left; }
+table th { background: #fafbfc; font-weight: 600; color: #555; position: sticky; top: 0; z-index: 1; }
+table tbody tr:hover { background: #f7f9fc; cursor: pointer; }
+table tbody tr.selected { background: #e7f0ff; }
+.scroll-tbl {
+  max-height: 480px; overflow-y: auto;
+  border: 1px solid #eee; border-radius: 4px;
+}
+
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.up   { color: #c0392b; }
+.down { color: #2980b9; }
+.muted { color: #999; font-size: 12px; }
+.warn  { color: #b85a00; font-size: 13px; }
+
+details { margin-top: 8px; }
+details summary { cursor: pointer; font-size: 13px; color: #555; }
+details ul { margin: 8px 0; padding-left: 24px; max-height: 220px; overflow-y: auto; font-size: 12px; }
+
+.legend-pill {
+  display: inline-block; padding: 1px 8px; border-radius: 10px;
+  font-size: 11px; color: white; margin-right: 4px;
+}
+.mode-toggle {
+  display: flex; gap: 14px; align-items: center;
+  margin: 6px 0 12px; font-size: 13px; color: #555;
+  padding: 6px 10px; background: #fafbfc;
+  border: 1px solid #e7e9ee; border-radius: 4px;
+}
+.mode-toggle label { cursor: pointer; user-select: none; }
+.mode-toggle input[type="radio"] { vertical-align: middle; margin-right: 4px; }
+.mode-toggle label:has(input:checked) { color: #2a6df4; font-weight: 600; }
+
+.etf-tabs {
+  display: flex; gap: 2px; margin-bottom: 10px;
+  border-bottom: 2px solid #2a6df4;
+}
+.etf-tab {
+  padding: 8px 16px; font-size: 13px; cursor: pointer;
+  background: #eef1f5; color: #555;
+  border: 1px solid #d6dae0; border-bottom: none;
+  border-radius: 5px 5px 0 0;
+  margin-bottom: -2px;
+}
+.etf-tab:hover { background: #dfe6f0; color: #2a6df4; }
+.etf-tab.active {
+  background: #2a6df4; color: white; font-weight: 600;
+  border-color: #2a6df4;
+}
+.etf-tab.cross-tab {
+  margin-left: auto;
+  background: #fff5e6;
+  border-color: #f0b96b;
+  color: #b85a00;
+}
+.etf-tab.cross-tab:hover { background: #ffe9c2; color: #8a4400; }
+.etf-tab.cross-tab.active {
+  background: #e67e22; border-color: #e67e22; color: white;
+}
+
+.report-section {
+  background: linear-gradient(180deg, #f5f7ff 0%, #ffffff 100%);
+  border: 1px solid #c7d4f0;
+}
+.report-section h2 {
+  color: #2a6df4; display: flex; align-items: center; gap: 8px;
+}
+.report-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.btn-llm {
+  padding: 8px 18px; background: #2a6df4; color: white;
+  border: none; border-radius: 4px; cursor: pointer;
+  font-size: 13px; font-weight: 600;
+}
+.btn-llm:hover { background: #1d54c9; }
+.btn-llm:disabled { background: #aaa; cursor: not-allowed; }
+
+.report-content { font-size: 14px; line-height: 1.65; color: #222; }
+.report-content h2 { font-size: 17px; margin: 18px 0 8px; color: #2a6df4; border: none; padding: 0; }
+.report-content h3 { font-size: 15px; margin: 14px 0 6px; color: #333; }
+.report-content h4 { font-size: 14px; margin: 10px 0 4px; color: #555; font-weight: 600; }
+.report-content p { margin: 6px 0; }
+.report-content ul { margin: 4px 0 8px; padding-left: 22px; }
+.report-content li { margin: 2px 0; }
+.report-content strong { color: #1a1a1a; }
+.report-content code { background: #eef0f4; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+
+.cross-kpi-table table { font-size: 12px; }
+.cross-kpi-table th, .cross-kpi-table td { padding: 6px 8px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="etf-tabs" id="etfTabs"></div>
+  <h1 id="etfTitle">TIME ETF 구성종목 트래커</h1>
+  <div class="controls">
+    <label>시작 <input type="date" id="startDate"></label>
+    <label>종료 <input type="date" id="endDate"></label>
+    <button id="applyBtn">적용</button>
+    <button class="preset" data-days="7">1W</button>
+    <button class="preset" data-days="30">1M</button>
+    <button class="preset" data-days="90">3M</button>
+    <button class="preset" data-days="180">6M</button>
+    <button class="preset" data-days="365">1Y</button>
+    <button class="preset" data-days="-1">전체</button>
+    <span class="meta" id="metaInfo"></span>
+  </div>
+</header>
+
+<main>
+<div id="singleEtfView">
+  <section class="report-section">
+    <h2>🤖 AI 종합 분석 보고서 <span class="muted" style="font-size:12px;font-weight:400;">(Gemini Flash)</span></h2>
+    <p class="desc">현재 ETF의 선택 기간 데이터(KPI / Top movers / 신규 편입·퇴출 / 지역 분포)를 바탕으로 매니저 전략·포지션 변화를 종합 분석합니다.</p>
+    <div class="report-actions">
+      <button id="btnEtfReport" class="btn-llm">📊 보고서 생성</button>
+      <span id="etfReportStatus" class="muted"></span>
+    </div>
+    <div id="etfReportContent" class="report-content"></div>
+  </section>
+
+  <section>
+    <h2>포트폴리오 KPI</h2>
+    <p class="desc">선택 기간 양 끝점 기준 요약 + 시계열.</p>
+    <div class="kpi-cards" id="kpiCards"></div>
+    <div class="kpi-charts">
+      <div id="kpiAumChart"></div>
+      <div id="kpiHoldingsChart"></div>
+      <div id="kpiTop10Chart"></div>
+      <div id="kpiCashChart"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>① 비중 변화 추이</h2>
+    <p class="desc">
+      기간 종료일 기준 상위 10종목 (현금 제외). 범례 클릭으로 종목 토글.<br>
+      <b>1종목만 활성화하면 → 그 종목의 주가(₩, 평가단가) 차트가 우측 축에 자동 오버레이</b> (비중-주가 상관관계 확인용). 2종목 이상 활성 시 자동 해제.
+    </p>
+    <div class="mode-toggle">
+      <span>표시:</span>
+      <label><input type="radio" name="weightMode" value="net" checked> Net 변화 (시작 = 0)</label>
+      <label><input type="radio" name="weightMode" value="gross"> Gross 비중</label>
+      <label><input type="radio" name="weightMode" value="qty"> 주수 변화율</label>
+    </div>
+    <div id="weightChart"></div>
+  </section>
+
+  <section>
+    <h2>② Top Movers — 비중 변동 랭킹</h2>
+    <p class="desc">기간 양 끝점에 모두 존재하는 종목 중 변동 상위/하위 10.</p>
+    <div class="mode-toggle">
+      <span>기준:</span>
+      <label><input type="radio" name="moverMode" value="net" checked> Net Δ비중 (%p, 절대)</label>
+      <label><input type="radio" name="moverMode" value="gross"> Gross 비중 변화율 (%, 상대)</label>
+      <label><input type="radio" name="moverMode" value="qty"> 주수 변화율 (%)</label>
+    </div>
+    <div class="row">
+      <div id="topUpChart"></div>
+      <div id="topDownChart"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>③ Net 비중 변화 — 패시브 스케일링 = 0</h2>
+    <p class="desc">
+      0 기준선이 <b>패시브 스케일링</b>(AUM이 늘어도 비중은 그대로). 양수(빨강) = 비중 순증가, 음수(파랑) = 비중 순감소.
+      매니저 매수와 종목별 가격 효과가 모두 합쳐진 <b>최종 결과(Δw = w₂ − w₁)</b>. 종료일 비중 상위 15종목, 값 기준 내림차순.
+    </p>
+    <div id="qtyPriceChart"></div>
+  </section>
+
+  <section>
+    <h2>④ 신규 편입 종목</h2>
+    <p class="desc">기간 내 새로 등장한 종목. 전 기간 한 번도 없다가 처음 등장하면 "최초", 잠시 빠졌다 돌아오면 "재편입".</p>
+    <div id="entriesContainer"></div>
+  </section>
+
+  <section>
+    <h2>⑤ 신규 퇴출 종목</h2>
+    <p class="desc">기간 내 사라진 종목. 이후로 한 번도 안 나타나면 "완전 퇴출", 다시 들어오면 "재진입함".</p>
+    <div id="exitsContainer"></div>
+  </section>
+
+  <section>
+    <h2>⑥ 보유 종목 표 (행 클릭 → 종목별 시계열)</h2>
+    <p class="desc">종료일 기준 보유 종목. 행 클릭 시 해당 종목 비중·수량·평가금액 시계열 표시.</p>
+    <div class="scroll-tbl"><table id="holdingsTable"></table></div>
+    <div id="drilldownChart" style="margin-top:12px;"></div>
+  </section>
+
+  <section>
+    <h2>⑦ 비중 히트맵</h2>
+    <p class="desc">기간 평균 비중 상위 30종목. X=날짜 / Y=종목 / 색=비중(%).</p>
+    <div id="heatmapChart"></div>
+  </section>
+
+  <section>
+    <h2>⑧ 지역별 비중 추이</h2>
+    <p class="desc">종목코드 접미사로 자동 분류 (US/KR/HK/JP/CN/Fund/Cash/Other).</p>
+    <div id="regionChart"></div>
+  </section>
+
+  <section>
+    <h2>⑨ 데이터 무결성</h2>
+    <div id="dataQuality"></div>
+  </section>
+
+  <section>
+    <h2>⑩ 데이터 내보내기</h2>
+    <p class="desc">선택 기간의 long-format CSV (UTF-8 BOM, 엑셀에서 한글 정상).</p>
+    <button id="exportCsvBtn" class="preset" style="padding:8px 16px; font-size:13px;">CSV 다운로드</button>
+  </section>
+</div><!-- /singleEtfView -->
+
+<div id="crossEtfView" style="display:none;">
+  <section class="report-section">
+    <h2>🌐 전체 펀드 통합 증감 분석 보고서 <span class="muted" style="font-size:12px;font-weight:400;">(Gemini Flash)</span></h2>
+    <p class="desc">4개 ETF의 선택 기간 데이터를 통합 비교 분석. 공통 보유종목·테마, 펀드별 차별화된 포지셔닝, 시장 흐름의 시사점을 종합합니다.</p>
+    <div class="report-actions">
+      <button id="btnCrossReport" class="btn-llm">📊 통합 보고서 생성</button>
+      <span id="crossReportStatus" class="muted"></span>
+    </div>
+    <div id="crossReportContent" class="report-content"></div>
+  </section>
+
+  <section>
+    <h2>펀드별 KPI 요약 (선택 기간)</h2>
+    <p class="desc">상단 날짜 범위에 맞춰 4개 펀드의 핵심 지표를 동시에 비교.</p>
+    <div id="crossKpiTable" class="cross-kpi-table"></div>
+  </section>
+
+  <section>
+    <h2>펀드별 Top 5 비중 증가</h2>
+    <div id="crossTopUp"></div>
+  </section>
+
+  <section>
+    <h2>펀드별 Top 5 비중 감소</h2>
+    <div id="crossTopDown"></div>
+  </section>
+</div><!-- /crossEtfView -->
+</main>
+
+<script>
+//==========================================================
+// TIME ETF Holdings Tracker
+//==========================================================
+const ROOT = window.ETF_DATA;
+if (!ROOT || !ROOT.etfs || !ROOT.etfs.length) {
+  document.body.innerHTML = '<p style="padding:24px;font-family:sans-serif">data.js 가 없거나 비어있습니다.<br>먼저 <code>start.bat</code> 또는 <code>build.bat</code> 를 실행하세요.</p>';
+  throw new Error('No data');
+}
+let DATA = ROOT.etfs[0];
+let currentEtfIdx = 0;
+
+const $ = id => document.getElementById(id);
+const fmt = (n, d=2) => n==null ? '-' : Number(n).toLocaleString('ko-KR', {maximumFractionDigits:d, minimumFractionDigits:d});
+const fmtInt = n => n==null ? '-' : Math.round(n).toLocaleString('ko-KR');
+const fmtPct = (n, d=2) => n==null ? '-' : (n>=0?'+':'') + Number(n).toFixed(d) + '%';
+const sgn = n => n==null ? '' : (n>0 ? 'up' : (n<0 ? 'down' : ''));
+const escHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const tickerShort = t => t.replace(/ US EQUITY| HK EQUITY| JP EQUITY| CH EQUITY| C2 EQUITY/, '').substring(0, 12);
+const fmtKrw = n => {
+  if (n == null) return '-';
+  if (n >= 1e12) return (n / 1e12).toFixed(2) + '조';
+  if (n >= 1e8)  return (n / 1e8).toFixed(2) + '억';
+  if (n >= 1e4)  return (n / 1e4).toFixed(1) + '만';
+  return Math.round(n).toLocaleString('ko-KR');
+};
+function totalAumAt(idx) {
+  let s = 0;
+  for (const t in DATA.series) {
+    const v = DATA.series[t].value[idx];
+    if (v != null) s += v;
+  }
+  return s;
+}
+
+const REGION_COLORS = {
+  US:'#3498db', KR:'#e74c3c', HK:'#9b59b6', JP:'#f39c12',
+  CN:'#1abc9c', Fund:'#95a5a6', Cash:'#bdc3c7', Other:'#34495e',
+};
+
+let state = { i1: 0, i2: DATA.dates.length - 1 };
+
+function dateToIdx(dateStr) {
+  const dates = DATA.dates;
+  if (dateStr <= dates[0]) return 0;
+  if (dateStr >= dates[dates.length-1]) return dates.length-1;
+  let lo=0, hi=dates.length-1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (dates[mid] <= dateStr) lo = mid; else hi = mid - 1;
+  }
+  return lo;
+}
+
+function buildTabs() {
+  const c = $('etfTabs');
+  const etfBtns = ROOT.etfs.map((e, i) =>
+    `<button class="etf-tab" data-i="${i}">${escHtml(e.name)}</button>`
+  ).join('');
+  const crossBtn = `<button class="etf-tab cross-tab" data-i="all">📊 전체 비교</button>`;
+  c.innerHTML = etfBtns + crossBtn;
+  c.querySelectorAll('.etf-tab').forEach(btn =>
+    btn.addEventListener('click', () => {
+      const v = btn.dataset.i;
+      if (v === 'all') switchToAll();
+      else switchEtf(parseInt(v));
+    }));
+}
+
+function setActiveTab(key) {
+  document.querySelectorAll('.etf-tab').forEach(btn =>
+    btn.classList.toggle('active', String(btn.dataset.i) === String(key)));
+}
+
+function switchEtf(i) {
+  const same = (currentEtfIdx === i && DATA === ROOT.etfs[i]);
+  currentEtfIdx = i;
+  DATA = ROOT.etfs[i];
+  setActiveTab(i);
+  $('singleEtfView').style.display = '';
+  $('crossEtfView').style.display = 'none';
+  $('etfTitle').textContent = DATA.name;
+  weightOverlay.activeTicker = null;
+  // ETF 전환 시 이전 보고서 컨텐츠 초기화 (혼동 방지)
+  $('etfReportContent').innerHTML = '';
+  $('etfReportStatus').textContent = '';
+  setupDates();
+  apply();
+  if (same) { /* noop */ }
+}
+
+function switchToAll() {
+  currentEtfIdx = 'all';
+  setActiveTab('all');
+  $('singleEtfView').style.display = 'none';
+  $('crossEtfView').style.display = '';
+  $('etfTitle').textContent = '전체 펀드 통합 비교';
+  // 비교 화면용 날짜 picker 범위는 모든 ETF의 공통 범위로
+  const first = ROOT.etfs.map(e => e.dates[0]).sort().pop();        // 가장 늦게 시작
+  const last  = ROOT.etfs.map(e => e.dates[e.dates.length - 1]).sort()[0]; // 가장 빨리 끝
+  $('startDate').min = first; $('startDate').max = last;
+  $('endDate').min = first; $('endDate').max = last;
+  if ($('startDate').value < first) $('startDate').value = first;
+  if ($('endDate').value > last)    $('endDate').value = last;
+  $('metaInfo').textContent = `${first} ~ ${last} 공통 범위 (4개 펀드 통합)`;
+  renderCrossView();
+}
+
+function setupDates() {
+  const first = DATA.dates[0], last = DATA.dates[DATA.dates.length - 1];
+  $('startDate').min = first; $('startDate').max = last; $('startDate').value = first;
+  $('endDate').min = first; $('endDate').max = last; $('endDate').value = last;
+  $('metaInfo').textContent = `${DATA.meta.first_date} ~ ${DATA.meta.last_date} (${DATA.meta.n_dates}일, ${DATA.meta.n_tickers}종목 누적)`;
+}
+
+// ============================================================
+//  LLM (Gemini Flash) — per-ETF & cross-ETF report
+// ============================================================
+const GEMINI_MODEL = 'gemini-3-flash-preview';
+
+function dateToIdxIn(dates, target) {
+  if (!target || target <= dates[0]) return 0;
+  if (target >= dates[dates.length - 1]) return dates.length - 1;
+  let lo = 0, hi = dates.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (dates[mid] <= target) lo = mid; else hi = mid - 1;
+  }
+  return lo;
+}
+
+function renderMarkdown(text) {
+  const lines = String(text).split('\n');
+  const out = [];
+  let inList = false;
+  const flushList = () => { if (inList) { out.push('</ul>'); inList = false; } };
+  for (let raw of lines) {
+    let line = escHtml(raw);
+    line = line.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    line = line.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    if (/^### /.test(line))     { flushList(); out.push(`<h4>${line.slice(4)}</h4>`); }
+    else if (/^## /.test(line)) { flushList(); out.push(`<h3>${line.slice(3)}</h3>`); }
+    else if (/^# /.test(line))  { flushList(); out.push(`<h2>${line.slice(2)}</h2>`); }
+    else if (/^[-*] /.test(line)) {
+      if (!inList) { out.push('<ul>'); inList = true; }
+      out.push(`<li>${line.replace(/^[-*] /, '')}</li>`);
+    } else if (/^\d+\.\s+/.test(line)) {
+      if (!inList) { out.push('<ul>'); inList = true; }
+      out.push(`<li>${line.replace(/^\d+\.\s+/, '')}</li>`);
+    } else if (line.trim() === '') {
+      flushList();
+      out.push('');
+    } else {
+      flushList();
+      out.push(`<p>${line}</p>`);
+    }
+  }
+  flushList();
+  return out.join('\n');
+}
+
+async function callGemini(prompt) {
+  const apiKey = (window.API_KEYS && window.API_KEYS.GEMINI_API_KEY) || '';
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY 없음. api_keys.txt 확인 후 build.bat 재실행.');
+  }
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data?.error?.message || `HTTP ${res.status}`);
+  }
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text || '(빈 응답)';
+}
+
+function etfAumAt(etf, idx) {
+  let s = 0;
+  for (const t in etf.series) {
+    const v = etf.series[t].value[idx];
+    if (v != null) s += v;
+  }
+  return s;
+}
+
+function buildEtfSnapshot(etf, i1, i2) {
+  const series = etf.series;
+  const tickersAt = idx => Object.keys(series).filter(t => series[t].weight[idx] != null);
+  const aum1 = etfAumAt(etf, i1), aum2 = etfAumAt(etf, i2);
+  const aumPct = aum1 > 0 ? (aum2 / aum1 - 1) * 100 : 0;
+  const tEnd = tickersAt(i2).filter(t => t !== '__CASH__');
+  tEnd.sort((a, b) => series[b].weight[i2] - series[a].weight[i2]);
+  const cashEnd = (series['__CASH__']?.weight?.[i2]) || 0;
+  const top10 = tEnd.slice(0, 10).reduce((s, t) => s + series[t].weight[i2], 0);
+
+  const movers = [];
+  for (const t in series) {
+    if (t === '__CASH__') continue;
+    const w1 = series[t].weight[i1], w2 = series[t].weight[i2];
+    if (w1 != null && w2 != null) {
+      movers.push({ ticker: t, name: etf.tickers[t].name, w1, w2, delta: w2 - w1 });
+    }
+  }
+  movers.sort((a, b) => b.delta - a.delta);
+  const topUp = movers.slice(0, 5);
+  const topDown = movers.slice(-5).reverse();
+
+  const entries = [], exits = [];
+  for (const t in series) {
+    if (t === '__CASH__') continue;
+    const w = series[t].weight;
+    for (let i = Math.max(1, i1); i <= i2; i++) {
+      if (w[i] != null && w[i-1] == null) {
+        entries.push({ date: etf.dates[i], ticker: t, name: etf.tickers[t].name, weight: w[i] });
+      }
+      if (w[i] == null && w[i-1] != null) {
+        exits.push({ date: etf.dates[i-1], ticker: t, name: etf.tickers[t].name, weight: w[i-1] });
+      }
+    }
+  }
+
+  const regSum = idx => {
+    const out = {};
+    for (const t in etf.tickers) {
+      const w = series[t].weight[idx];
+      if (w != null) {
+        const r = etf.tickers[t].region;
+        out[r] = (out[r] || 0) + w;
+      }
+    }
+    return out;
+  };
+  const r1 = regSum(i1), r2 = regSum(i2);
+  const regDelta = {};
+  for (const r of new Set([...Object.keys(r1), ...Object.keys(r2)])) {
+    regDelta[r] = (r2[r] || 0) - (r1[r] || 0);
+  }
+
+  // turnover
+  let turnover = 0;
+  const allT = new Set([...tickersAt(i1), ...tickersAt(i2)]);
+  allT.forEach(t => {
+    const w1 = series[t].weight[i1] || 0, w2 = series[t].weight[i2] || 0;
+    turnover += Math.abs(w2 - w1);
+  });
+  turnover *= 0.5;
+
+  const topHoldings = tEnd.slice(0, 10).map(t => ({
+    ticker: t, name: etf.tickers[t].name, region: etf.tickers[t].region,
+    weight: series[t].weight[i2],
+  }));
+
+  return {
+    startD: etf.dates[i1], endD: etf.dates[i2],
+    aum1, aum2, aumPct, cashEnd, top10Conc: top10, turnover,
+    holdingsCount: tEnd.length,
+    topHoldings, topUp, topDown,
+    entries, exits, regDelta,
+  };
+}
+
+function formatSnapshot(s, name) {
+  const krw = n => (n / 1e8).toFixed(1) + '억';
+  let t = `# ${name}\n`;
+  t += `기간: ${s.startD} ~ ${s.endD}\n`;
+  t += `AUM: ${krw(s.aum1)} → ${krw(s.aum2)} (${s.aumPct >= 0 ? '+' : ''}${s.aumPct.toFixed(1)}%)\n`;
+  t += `보유 종목: ${s.holdingsCount} | 상위10 집중도 ${s.top10Conc.toFixed(1)}% | 현금 ${s.cashEnd.toFixed(1)}% | 회전율 ${s.turnover.toFixed(1)}%\n\n`;
+  t += `## 종료일 상위 10 종목\n`;
+  for (const h of s.topHoldings) t += `- ${h.ticker} ${h.name} (${h.region}) ${h.weight.toFixed(2)}%\n`;
+  t += `\n## Top 5 비중 증가 (Net Δ)\n`;
+  for (const m of s.topUp) t += `- ${m.ticker} ${m.name}: ${m.w1.toFixed(2)}% → ${m.w2.toFixed(2)}% (${m.delta >= 0 ? '+' : ''}${m.delta.toFixed(2)}%p)\n`;
+  t += `\n## Top 5 비중 감소 (Net Δ)\n`;
+  for (const m of s.topDown) t += `- ${m.ticker} ${m.name}: ${m.w1.toFixed(2)}% → ${m.w2.toFixed(2)}% (${m.delta.toFixed(2)}%p)\n`;
+  t += `\n## 신규 편입 (${s.entries.length}건, 최근 8건)\n`;
+  for (const e of s.entries.slice(-8)) t += `- ${e.date} ${e.ticker} ${e.name} (편입 ${e.weight.toFixed(2)}%)\n`;
+  t += `\n## 신규 퇴출 (${s.exits.length}건, 최근 8건)\n`;
+  for (const e of s.exits.slice(-8)) t += `- ${e.date} ${e.ticker} ${e.name} (직전 ${e.weight.toFixed(2)}%)\n`;
+  t += `\n## 지역 비중 변화 (%p, |Δ| ≥ 0.5만)\n`;
+  for (const r of Object.keys(s.regDelta).sort((a, b) => Math.abs(s.regDelta[b]) - Math.abs(s.regDelta[a]))) {
+    const d = s.regDelta[r];
+    if (Math.abs(d) < 0.5) continue;
+    t += `- ${r}: ${d >= 0 ? '+' : ''}${d.toFixed(1)}%p\n`;
+  }
+  return t;
+}
+
+async function generateEtfReport() {
+  const btn = $('btnEtfReport');
+  const status = $('etfReportStatus');
+  const content = $('etfReportContent');
+  const i1 = state.i1, i2 = state.i2;
+  const snap = buildEtfSnapshot(DATA, i1, i2);
+  const text = formatSnapshot(snap, DATA.name);
+  const prompt = `당신은 한국 ETF의 운용 데이터를 분석하는 전문 애널리스트입니다.
+다음은 "${DATA.name}" 펀드의 선택 기간 운용 데이터입니다.
+
+${text}
+
+위 데이터를 바탕으로 다음 4개 섹션의 종합 분석 보고서를 한국어로 작성해 주세요. 마크다운 형식 사용.
+
+## 1. 운용 핵심 요약
+한 단락으로 펀드의 운용 방향성과 주요 변화를 정리.
+
+## 2. 주요 포지션 변화
+Top movers와 신규 편입/퇴출이 시사하는 매니저의 의도. 구체적 종목명 인용.
+
+## 3. 투자 테마 / 섹터·지역 변화
+종목 분포·지역 변화에서 드러나는 투자 테마와 로테이션.
+
+## 4. 주목할 만한 점 / 리스크
+포트폴리오 집중도, 회전율, AUM 변화의 특이사항. 잠재 리스크.`;
+
+  btn.disabled = true;
+  status.textContent = '⏳ Gemini Flash 호출 중... (5~15초)';
+  content.innerHTML = '';
+  try {
+    const t0 = Date.now();
+    const out = await callGemini(prompt);
+    const dt = ((Date.now() - t0) / 1000).toFixed(1);
+    content.innerHTML = renderMarkdown(out) +
+      `<p class="muted" style="margin-top:14px;">생성: ${new Date().toLocaleString('ko-KR')} · ${dt}s · 모델 ${GEMINI_MODEL}</p>`;
+    status.textContent = '';
+  } catch (e) {
+    status.innerHTML = `<span class="warn">에러: ${escHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function generateCrossReport() {
+  const btn = $('btnCrossReport');
+  const status = $('crossReportStatus');
+  const content = $('crossReportContent');
+  const sd = $('startDate').value, ed = $('endDate').value;
+  let combined = '';
+  for (const etf of ROOT.etfs) {
+    const i1 = dateToIdxIn(etf.dates, sd);
+    const i2 = dateToIdxIn(etf.dates, ed);
+    const snap = buildEtfSnapshot(etf, i1, i2);
+    combined += formatSnapshot(snap, etf.name) + '\n---\n';
+  }
+  const prompt = `당신은 한국 ETF 운용 데이터를 분석하는 전문 애널리스트입니다.
+다음은 4개 ETF의 같은 기간 운용 데이터입니다.
+
+${combined}
+
+위 데이터를 바탕으로 4개 펀드의 통합 비교 분석 보고서를 한국어 마크다운으로 작성해 주세요.
+
+## 1. 펀드별 핵심 변화 (한 줄씩)
+각 펀드의 가장 중요한 1~2가지 변화.
+
+## 2. 공통 보유 종목 / 공통 테마
+여러 펀드에서 동시에 비중이 늘거나 줄어든 종목, 공통 투자 테마.
+
+## 3. 펀드 간 차별화된 전략
+각 펀드의 특색 있는 매니저 액션.
+
+## 4. 종합 시사점 / 시장 관점
+4개 펀드 데이터에서 읽히는 시장 흐름·매니저 컨센서스 또는 분기점.`;
+
+  btn.disabled = true;
+  status.textContent = '⏳ 4개 펀드 통합 분석 중... (10~25초)';
+  content.innerHTML = '';
+  try {
+    const t0 = Date.now();
+    const out = await callGemini(prompt);
+    const dt = ((Date.now() - t0) / 1000).toFixed(1);
+    content.innerHTML = renderMarkdown(out) +
+      `<p class="muted" style="margin-top:14px;">생성: ${new Date().toLocaleString('ko-KR')} · ${dt}s · 모델 ${GEMINI_MODEL}</p>`;
+    status.textContent = '';
+  } catch (e) {
+    status.innerHTML = `<span class="warn">에러: ${escHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderCrossView() {
+  const sd = $('startDate').value, ed = $('endDate').value;
+  const snaps = ROOT.etfs.map(etf => {
+    const i1 = dateToIdxIn(etf.dates, sd);
+    const i2 = dateToIdxIn(etf.dates, ed);
+    return { etf, snap: buildEtfSnapshot(etf, i1, i2) };
+  });
+  // KPI 비교 테이블
+  let html = `<table>
+    <thead><tr>
+      <th>ETF</th>
+      <th class="num">기간</th>
+      <th class="num">AUM</th>
+      <th class="num">AUM Δ</th>
+      <th class="num">종목수</th>
+      <th class="num">Top10 집중</th>
+      <th class="num">현금</th>
+      <th class="num">회전율</th>
+      <th class="num">신규편입</th>
+      <th class="num">신규퇴출</th>
+    </tr></thead><tbody>`;
+  for (const { etf, snap } of snaps) {
+    html += `<tr>
+      <td><b>${escHtml(etf.name)}</b></td>
+      <td class="num muted">${snap.startD}~${snap.endD}</td>
+      <td class="num">${fmtKrw(snap.aum2)}</td>
+      <td class="num ${sgn(snap.aumPct)}">${fmtPct(snap.aumPct, 1)}</td>
+      <td class="num">${snap.holdingsCount}</td>
+      <td class="num">${snap.top10Conc.toFixed(1)}%</td>
+      <td class="num">${snap.cashEnd.toFixed(1)}%</td>
+      <td class="num">${snap.turnover.toFixed(1)}%</td>
+      <td class="num">${snap.entries.length}</td>
+      <td class="num">${snap.exits.length}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  $('crossKpiTable').innerHTML = html;
+
+  // Top movers 테이블 (펀드별 Top 5 상승 / 하락)
+  const moverRow = (mvs) => mvs.length
+    ? mvs.map(m => `<li>${escHtml(tickerShort(m.ticker))} ${escHtml(m.name)} <span class="${sgn(m.delta)}">${fmtPct(m.delta, 2)}p</span></li>`).join('')
+    : '<li class="muted">데이터 없음</li>';
+  let upHtml = '<div class="row">';
+  let dnHtml = '<div class="row">';
+  for (const { etf, snap } of snaps) {
+    upHtml += `<div><h3>${escHtml(etf.name)}</h3><ul style="font-size:12px;">${moverRow(snap.topUp)}</ul></div>`;
+    dnHtml += `<div><h3>${escHtml(etf.name)}</h3><ul style="font-size:12px;">${moverRow(snap.topDown)}</ul></div>`;
+  }
+  upHtml += '</div>'; dnHtml += '</div>';
+  $('crossTopUp').innerHTML = upHtml;
+  $('crossTopDown').innerHTML = dnHtml;
+}
+
+// ============================================================
+
+function init() {
+  buildTabs();
+  $('applyBtn').addEventListener('click', apply);
+  $('exportCsvBtn').addEventListener('click', exportCsv);
+  $('btnEtfReport').addEventListener('click', generateEtfReport);
+  $('btnCrossReport').addEventListener('click', generateCrossReport);
+  document.querySelectorAll('input[name="weightMode"]').forEach(r =>
+    r.addEventListener('change', renderWeightChart));
+  document.querySelectorAll('input[name="moverMode"]').forEach(r =>
+    r.addEventListener('change', renderTopMovers));
+  document.querySelectorAll('.preset[data-days]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const days = parseInt(btn.dataset.days);
+      const first = DATA.dates[0], last = DATA.dates[DATA.dates.length - 1];
+      if (days < 0) {
+        $('startDate').value = first; $('endDate').value = last;
+      } else {
+        const endD = new Date(last);
+        const startD = new Date(endD.getTime() - days * 86400000);
+        $('startDate').value = startD.toISOString().slice(0, 10);
+        $('endDate').value = last;
+      }
+      apply();
+    });
+  });
+  switchEtf(0);
+}
+
+function apply() {
+  if (currentEtfIdx === 'all') {
+    renderCrossView();
+    return;
+  }
+  state.i1 = dateToIdx($('startDate').value);
+  state.i2 = dateToIdx($('endDate').value);
+  if (state.i1 > state.i2) [state.i1, state.i2] = [state.i2, state.i1];
+  renderAll();
+}
+
+function renderAll() {
+  renderKPIs();
+  renderWeightChart();
+  renderTopMovers();
+  renderQtyPrice();
+  renderEntriesExits();
+  renderHoldingsTable();
+  renderHeatmap();
+  renderRegion();
+  renderDataQuality();
+  renderDrilldown(null);
+}
+
+// ----- helpers -----
+const activeDates = () => DATA.dates.slice(state.i1, state.i2 + 1);
+const tickersAt = idx => Object.keys(DATA.tickers).filter(t => DATA.series[t].weight[idx] != null);
+const weightAt = (t, i) => DATA.series[t].weight[i];
+const qtyAt = (t, i) => DATA.series[t].qty[i];
+const valueAt = (t, i) => DATA.series[t].value[i];
+const priceAt = (t, i) => {
+  const v = valueAt(t, i), q = qtyAt(t, i);
+  return (v != null && q != null && q > 0) ? v / q : null;
+};
+
+// ===== KPI =====
+function renderKPIs() {
+  const i1 = state.i1, i2 = state.i2;
+  const dates = activeDates();
+  const n = dates.length;
+
+  const countSeries = new Array(n);
+  const top10Series = new Array(n);
+  const cashSeries = new Array(n);
+  const aumSeries = new Array(n);
+  for (let k = 0; k < n; k++) {
+    const idx = i1 + k;
+    const ts = tickersAt(idx).filter(t => t !== '__CASH__');
+    countSeries[k] = ts.length;
+    const ws = ts.map(t => weightAt(t, idx)).sort((a,b) => b - a).slice(0, 10);
+    top10Series[k] = ws.reduce((a, b) => a + b, 0);
+    cashSeries[k] = weightAt('__CASH__', idx) || 0;
+    aumSeries[k] = totalAumAt(idx);
+  }
+  const c1 = countSeries[0], c2 = countSeries[n-1];
+  const t1 = top10Series[0], t2 = top10Series[n-1];
+  const cash1 = cashSeries[0], cash2 = cashSeries[n-1];
+  const aum1 = aumSeries[0], aum2 = aumSeries[n-1];
+  const aumPct = aum1 > 0 ? (aum2 / aum1 - 1) * 100 : 0;
+
+  const allT = new Set([...tickersAt(i1), ...tickersAt(i2)]);
+  let turnover = 0;
+  allT.forEach(t => {
+    const w1 = weightAt(t, i1) || 0, w2 = weightAt(t, i2) || 0;
+    turnover += Math.abs(w2 - w1);
+  });
+  turnover *= 0.5;
+
+  $('kpiCards').innerHTML = `
+    <div class="kpi-card">
+      <div class="label">AUM (총 평가액)</div>
+      <div class="value">${fmtKrw(aum2)}</div>
+      <div class="delta ${sgn(aumPct)}">${fmtPct(aumPct,2)} <span class="muted">시작 ${fmtKrw(aum1)}</span></div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">종목 수 (현금 제외)</div>
+      <div class="value">${c2}</div>
+      <div class="delta ${sgn(c2-c1)}">${c2-c1>=0?'+':''}${c2-c1} <span class="muted">시작 ${c1}</span></div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">상위 10종목 집중도</div>
+      <div class="value">${fmt(t2,1)}%</div>
+      <div class="delta ${sgn(t2-t1)}">${fmtPct(t2-t1,2)}p <span class="muted">시작 ${fmt(t1,1)}%</span></div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">현금 비중</div>
+      <div class="value">${fmt(cash2,2)}%</div>
+      <div class="delta ${sgn(cash2-cash1)}">${fmtPct(cash2-cash1,2)}p <span class="muted">시작 ${fmt(cash1,2)}%</span></div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">기간 회전율 (one-side)</div>
+      <div class="value">${fmt(turnover,1)}%</div>
+      <div class="delta muted">Σ|Δw_i| ÷ 2</div>
+    </div>
+  `;
+
+  const baseLayout = title => ({
+    title: { text: title, font: { size: 13 } },
+    height: 220, margin: { l: 44, r: 16, t: 32, b: 32 },
+    xaxis: { tickfont: { size: 10 } }, yaxis: { tickfont: { size: 10 } },
+  });
+  const cfg = { displayModeBar: false, responsive: true };
+  Plotly.newPlot('kpiAumChart',
+    [{ x: dates, y: aumSeries, type: 'scatter', mode: 'lines', fill: 'tozeroy', line: { color: '#9b59b6' },
+       hovertemplate: '%{x}<br>AUM: %{y:,.0f}원<extra></extra>' }],
+    baseLayout('AUM (원) — 펀드 전체 평가액'), cfg);
+  Plotly.newPlot('kpiHoldingsChart',
+    [{ x: dates, y: countSeries, type: 'scatter', mode: 'lines', line: { color: '#3498db' } }],
+    baseLayout('종목 수 추이'), cfg);
+  Plotly.newPlot('kpiTop10Chart',
+    [{ x: dates, y: top10Series, type: 'scatter', mode: 'lines', line: { color: '#e67e22' } }],
+    baseLayout('상위 10종목 집중도 (%)'), cfg);
+  Plotly.newPlot('kpiCashChart',
+    [{ x: dates, y: cashSeries, type: 'scatter', mode: 'lines', fill: 'tozeroy', line: { color: '#16a085' } }],
+    baseLayout('현금 비중 (%)'), cfg);
+}
+
+// ===== ① Price overlay (single-trace) =====
+const weightOverlay = { tickers: [], activeTicker: null };
+
+function computePriceSeries(ticker) {
+  const out = [];
+  for (let i = state.i1; i <= state.i2; i++) out.push(priceAt(ticker, i));
+  return out;
+}
+
+function showPriceOverlay(ticker) {
+  const gd = $('weightChart');
+  if (!gd || !gd.data) return;
+  const N = weightOverlay.tickers.length;
+  const priceY = computePriceSeries(ticker);
+  if (!priceY.some(v => v != null)) return;
+  if (gd.data.length > N) Plotly.deleteTraces(gd, N);
+  Plotly.addTraces(gd, {
+    x: activeDates(),
+    y: priceY,
+    name: `${tickerShort(ticker)} 주가`,
+    type: 'scatter', mode: 'lines',
+    yaxis: 'y2',
+    line: { color: '#000', width: 1.5 },
+    hovertemplate: '주가 ₩%{y:,.0f}<extra></extra>',
+    showlegend: false,
+  });
+  Plotly.relayout(gd, {
+    'yaxis2.visible': true,
+    'yaxis2.title': { text: `${tickerShort(ticker)} 주가 (₩)`, font: { size: 11, color: '#000' } },
+    'yaxis2.tickfont': { size: 10, color: '#000' },
+    'yaxis2.overlaying': 'y',
+    'yaxis2.side': 'right',
+    'yaxis2.showgrid': false,
+  });
+}
+
+function hidePriceOverlay() {
+  const gd = $('weightChart');
+  if (!gd || !gd.data) return;
+  const N = weightOverlay.tickers.length;
+  if (gd.data.length > N) Plotly.deleteTraces(gd, N);
+  Plotly.relayout(gd, { 'yaxis2.visible': false });
+}
+
+function handleWeightLegendChange(eventData) {
+  // restyle 이벤트는 addTraces/relayout 등에서도 발생 — 사용자의 visible 토글일 때만 처리
+  if (!eventData || !eventData[0] || !('visible' in eventData[0])) return;
+  const gd = $('weightChart');
+  if (!gd || !gd.data) return;
+  const N = weightOverlay.tickers.length;
+  let visibleIdx = -1, count = 0;
+  for (let i = 0; i < N; i++) {
+    const v = gd.data[i].visible;
+    if (v !== 'legendonly' && v !== false) { count++; visibleIdx = i; }
+  }
+  if (count === 1) {
+    weightOverlay.activeTicker = weightOverlay.tickers[visibleIdx];
+    showPriceOverlay(weightOverlay.activeTicker);
+  } else {
+    weightOverlay.activeTicker = null;
+    hidePriceOverlay();
+  }
+}
+
+// ===== ① Weight Chart (Net / Gross / Qty modes) =====
+function renderWeightChart() {
+  const mode = (document.querySelector('input[name="weightMode"]:checked') || {}).value || 'net';
+  const i1 = state.i1, i2 = state.i2;
+  const dates = activeDates();
+  const ts = tickersAt(i2).filter(t => t !== '__CASH__');
+  ts.sort((a, b) => weightAt(b, i2) - weightAt(a, i2));
+  const top = ts.slice(0, 10);
+
+  let yTitle, getY, hoverFmt, valSuffix;
+  if (mode === 'net') {
+    yTitle = 'Net Δ비중 (시작 = 0, %p)';
+    valSuffix = '%p';
+    getY = t => {
+      const arr = DATA.series[t].weight;
+      let base = null;
+      for (let i = i1; i <= i2; i++) { if (arr[i] != null) { base = arr[i]; break; } }
+      if (base == null) return new Array(i2 - i1 + 1).fill(null);
+      const out = [];
+      for (let i = i1; i <= i2; i++) out.push(arr[i] == null ? null : arr[i] - base);
+      return out;
+    };
+    hoverFmt = '%{y:+.2f}%p';
+  } else if (mode === 'gross') {
+    yTitle = '비중 (%)';
+    valSuffix = '%';
+    getY = t => DATA.series[t].weight.slice(i1, i2 + 1);
+    hoverFmt = '%{y:.2f}%';
+  } else { // qty
+    yTitle = '주수 변화율 (시작 = 0%, %)';
+    valSuffix = '%';
+    getY = t => {
+      const arr = DATA.series[t].qty;
+      let base = null;
+      for (let i = i1; i <= i2; i++) { if (arr[i] != null && arr[i] > 0) { base = arr[i]; break; } }
+      if (base == null) return new Array(i2 - i1 + 1).fill(null);
+      const out = [];
+      for (let i = i1; i <= i2; i++) out.push(arr[i] == null ? null : (arr[i] / base - 1) * 100);
+      return out;
+    };
+    hoverFmt = '%{y:+.1f}%';
+  }
+
+  const traces = top.map(t => ({
+    x: dates,
+    y: getY(t),
+    name: `${tickerShort(t)} ${DATA.tickers[t].name}`.substring(0, 32),
+    type: 'scatter', mode: 'lines',
+    line: { width: 1.5 },
+    connectgaps: false,
+    hovertemplate: `<b>${escHtml(DATA.tickers[t].name)}</b><br>%{x}: ${hoverFmt}<extra></extra>`,
+  }));
+
+  const layout = {
+    height: 420,
+    margin: { l: 60, r: 20, t: 10, b: 60 },
+    yaxis: { title: yTitle, ticksuffix: valSuffix === '%p' ? '' : '' },
+    legend: { orientation: 'h', y: -0.15, font: { size: 11 } },
+    hovermode: 'x unified',
+  };
+  if (mode !== 'gross') {
+    layout.shapes = [{
+      type: 'line', x0: dates[0], x1: dates[dates.length - 1],
+      y0: 0, y1: 0, xref: 'x', yref: 'y',
+      line: { color: '#888', width: 1, dash: 'dash' },
+    }];
+  }
+  weightOverlay.tickers = top;
+
+  // 이전에 1종목 isolate 상태였다면, 그 종목이 새 top-10에 여전히 있으면 복원
+  let restoreOverlay = false;
+  if (weightOverlay.activeTicker) {
+    const idx = top.indexOf(weightOverlay.activeTicker);
+    if (idx >= 0) {
+      traces.forEach((tr, i) => { tr.visible = (i === idx) ? true : 'legendonly'; });
+      restoreOverlay = true;
+    } else {
+      weightOverlay.activeTicker = null;
+    }
+  }
+
+  Plotly.newPlot('weightChart', traces, layout, { responsive: true }).then(() => {
+    // newPlot 은 emitter 를 재생성하므로 매 렌더마다 리스너 재등록 필요
+    $('weightChart').on('plotly_restyle', handleWeightLegendChange);
+    if (restoreOverlay) showPriceOverlay(weightOverlay.activeTicker);
+  });
+}
+
+// ===== ④ Top Movers (Net / Gross / Qty modes) =====
+function renderTopMovers() {
+  const mode = (document.querySelector('input[name="moverMode"]:checked') || {}).value || 'net';
+  const i1 = state.i1, i2 = state.i2;
+  const movers = [];
+  for (const t in DATA.series) {
+    if (t === '__CASH__') continue;
+    const w1 = weightAt(t, i1), w2 = weightAt(t, i2);
+    const q1 = qtyAt(t, i1), q2 = qtyAt(t, i2);
+    let delta = null;
+    if (mode === 'net') {
+      if (w1 != null && w2 != null) delta = w2 - w1;
+    } else if (mode === 'gross') {
+      if (w1 != null && w2 != null && w1 > 0) delta = (w2 / w1 - 1) * 100;
+    } else { // qty
+      if (q1 != null && q2 != null && q1 > 0) delta = (q2 / q1 - 1) * 100;
+    }
+    if (delta != null && isFinite(delta)) {
+      movers.push({ ticker: t, name: DATA.tickers[t].name, w1, w2, q1, q2, delta });
+    }
+  }
+  movers.sort((a, b) => b.delta - a.delta);
+  const ups = movers.slice(0, 10);
+  const downs = movers.slice(-10).reverse();
+
+  const cfg = {
+    net:   { unit: '%p', axis: 'Net Δ비중 (%p)',          dec: 2, hover: t => `${fmt(t.w1,2)}% → ${fmt(t.w2,2)}%` },
+    gross: { unit: '%',  axis: 'Gross 비중 변화율 (%, 상대)', dec: 1, hover: t => `${fmt(t.w1,2)}% → ${fmt(t.w2,2)}%` },
+    qty:   { unit: '%',  axis: '주수 변화율 (%)',           dec: 1, hover: t => `${fmtInt(t.q1)} → ${fmtInt(t.q2)} 주` },
+  }[mode];
+
+  const bar = (id, items, title, color) => {
+    const labels = items.map(m => `${tickerShort(m.ticker)} ${m.name}`.substring(0, 28));
+    Plotly.newPlot(id, [{
+      type: 'bar', orientation: 'h',
+      x: items.map(m => m.delta), y: labels,
+      marker: { color },
+      text: items.map(m => fmtPct(m.delta, cfg.dec) + cfg.unit),
+      textposition: 'outside',
+      customdata: items.map(m => [cfg.hover(m)]),
+      hovertemplate: '<b>%{y}</b><br>%{customdata[0]}<br>Δ %{x:+.' + cfg.dec + 'f}' + cfg.unit + '<extra></extra>',
+    }], {
+      title: { text: title, font: { size: 13 } },
+      height: 360,
+      margin: { l: 200, r: 70, t: 32, b: 36 },
+      yaxis: { autorange: 'reversed', tickfont: { size: 10 } },
+      xaxis: { title: cfg.axis, zeroline: true },
+    }, { displayModeBar: false, responsive: true });
+  };
+  bar('topUpChart', ups, '상위 10 ↑', '#c0392b');
+  bar('topDownChart', downs, '상위 10 ↓', '#2980b9');
+}
+
+// ===== ⑤ Net Δweight (passive scaling = 0) =====
+function renderQtyPrice() {
+  const i1 = state.i1, i2 = state.i2;
+  const aum1 = totalAumAt(i1), aum2 = totalAumAt(i2);
+  const aumPct = aum1 > 0 ? (aum2 / aum1 - 1) * 100 : 0;
+
+  const items = [];
+  for (const t in DATA.series) {
+    if (t === '__CASH__') continue;
+    const w1 = weightAt(t, i1), w2 = weightAt(t, i2);
+    if (w1 != null && w2 != null) {
+      items.push({
+        ticker: t, name: DATA.tickers[t].name,
+        w1, w2, deltaW: w2 - w1,
+      });
+    }
+  }
+  items.sort((a, b) => b.w2 - a.w2);
+  const top = items.slice(0, 15);
+  top.sort((a, b) => b.deltaW - a.deltaW);
+
+  if (top.length === 0) {
+    $('qtyPriceChart').innerHTML = '<p class="muted">기간 양 끝점에 동시에 존재하는 종목이 없습니다.</p>';
+    return;
+  }
+  const labels = top.map(m => `${tickerShort(m.ticker)} ${m.name}`.substring(0, 28));
+  const colors = top.map(m => m.deltaW >= 0 ? '#c0392b' : '#2980b9');
+
+  Plotly.newPlot('qtyPriceChart', [{
+    type: 'bar', orientation: 'h',
+    x: top.map(m => m.deltaW),
+    y: labels,
+    marker: { color: colors },
+    customdata: top.map(m => [m.w1, m.w2]),
+    text: top.map(m => fmtPct(m.deltaW, 2) + 'p'),
+    textposition: 'outside',
+    hovertemplate: '<b>%{y}</b><br>%{customdata[0]:.2f}% → %{customdata[1]:.2f}%<br>Net Δ %{x:+.2f}%p<extra></extra>',
+  }], {
+    height: 480,
+    margin: { l: 200, r: 70, t: 30, b: 50 },
+    yaxis: { autorange: 'reversed', tickfont: { size: 10 } },
+    xaxis: {
+      title: `Net Δ비중 (%p)  ·  기간 AUM ${fmtPct(aumPct, 1)} (참고)`,
+      zeroline: true, zerolinewidth: 2, zerolinecolor: '#444',
+    },
+    annotations: [{
+      x: 0, y: 1, xref: 'x', yref: 'paper',
+      text: '0 = 패시브 스케일링 (비중 그대로)',
+      showarrow: false, yshift: 14,
+      bgcolor: '#444', font: { color: 'white', size: 11 },
+      borderpad: 4,
+    }],
+  }, { displayModeBar: false, responsive: true });
+}
+
+// ===== ② ③ Entries / Exits =====
+function findEntriesExits() {
+  const i1 = state.i1, i2 = state.i2;
+  const entries = [], exits = [];
+  for (const t in DATA.series) {
+    if (t === '__CASH__') continue;
+    const w = DATA.series[t].weight;
+    const N = w.length;
+    for (let i = Math.max(1, i1); i <= i2; i++) {
+      if (w[i] != null && w[i-1] == null) {
+        let firstAppearance = true;
+        for (let j = 0; j < i - 1; j++) {
+          if (w[j] != null) { firstAppearance = false; break; }
+        }
+        entries.push({
+          date: DATA.dates[i], ticker: t, name: DATA.tickers[t].name,
+          weight: w[i], firstAppearance,
+        });
+      }
+      if (w[i] == null && w[i-1] != null) {
+        let lastAppearance = true;
+        for (let j = i + 1; j < N; j++) {
+          if (w[j] != null) { lastAppearance = false; break; }
+        }
+        // 현재 보유 사이클의 시작점 (가장 최근 편입일) 찾기
+        let cycleStart = i - 1;
+        while (cycleStart > 0 && w[cycleStart - 1] != null) cycleStart--;
+        const dEntry = new Date(DATA.dates[cycleStart]);
+        const dExit  = new Date(DATA.dates[i - 1]);
+        const heldDays = Math.round((dExit - dEntry) / 86400000) + 1;
+        exits.push({
+          date: DATA.dates[i-1], ticker: t, name: DATA.tickers[t].name,
+          weight: w[i-1], lastAppearance,
+          entryDate: DATA.dates[cycleStart],
+          heldDays,
+        });
+      }
+    }
+  }
+  entries.sort((a, b) => b.date.localeCompare(a.date) || b.weight - a.weight);
+  exits.sort((a, b) => b.date.localeCompare(a.date) || b.weight - a.weight);
+  return { entries, exits };
+}
+
+function renderEntriesExits() {
+  const { entries, exits } = findEntriesExits();
+
+  $('entriesContainer').innerHTML = entries.length === 0
+    ? '<p class="muted">기간 내 해당 없음</p>'
+    : `<div class="scroll-tbl"><table>
+        <thead><tr>
+          <th>편입일</th><th>종목코드</th><th>종목명</th><th>지역</th>
+          <th class="num">편입 시점 비중</th><th>최초 등장</th>
+        </tr></thead>
+        <tbody>${entries.map(e => `
+          <tr>
+            <td>${e.date}</td>
+            <td>${escHtml(e.ticker)}</td>
+            <td>${escHtml(e.name)}</td>
+            <td>${DATA.tickers[e.ticker].region}</td>
+            <td class="num">${fmt(e.weight, 2)}%</td>
+            <td>${e.firstAppearance ? '최초' : '재편입'}</td>
+          </tr>`).join('')}
+        </tbody></table></div>
+        <p class="muted" style="margin-top:6px;">총 ${entries.length}건</p>`;
+
+  $('exitsContainer').innerHTML = exits.length === 0
+    ? '<p class="muted">기간 내 해당 없음</p>'
+    : `<div class="scroll-tbl"><table>
+        <thead><tr>
+          <th>퇴출일(마지막 등장)</th><th>편입일</th><th class="num">보유일수</th>
+          <th>종목코드</th><th>종목명</th><th>지역</th>
+          <th class="num">직전 비중</th><th>완전 퇴출</th>
+        </tr></thead>
+        <tbody>${exits.map(e => `
+          <tr>
+            <td>${e.date}</td>
+            <td>${e.entryDate}</td>
+            <td class="num">${e.heldDays}일</td>
+            <td>${escHtml(e.ticker)}</td>
+            <td>${escHtml(e.name)}</td>
+            <td>${DATA.tickers[e.ticker].region}</td>
+            <td class="num">${fmt(e.weight, 2)}%</td>
+            <td>${e.lastAppearance ? '완전' : '재진입함'}</td>
+          </tr>`).join('')}
+        </tbody></table></div>
+        <p class="muted" style="margin-top:6px;">총 ${exits.length}건</p>`;
+}
+
+// ===== ⑥ Holdings table + Drilldown =====
+function renderHoldingsTable() {
+  const i1 = state.i1, i2 = state.i2;
+  const ts = tickersAt(i2);
+  const rows = ts.map(t => {
+    const w1 = weightAt(t, i1), w2 = weightAt(t, i2);
+    return {
+      ticker: t, name: DATA.tickers[t].name, region: DATA.tickers[t].region,
+      qty: qtyAt(t, i2), value: valueAt(t, i2), w2,
+      delta: (w1 != null && t !== '__CASH__') ? w2 - w1 : (t === '__CASH__' && w1 != null ? w2 - w1 : null),
+    };
+  });
+  rows.sort((a, b) => b.w2 - a.w2);
+  const html = `
+    <thead><tr>
+      <th>종목코드</th><th>종목명</th><th>지역</th>
+      <th class="num">수량</th><th class="num">평가금액(원)</th>
+      <th class="num">비중</th><th class="num">Δ비중 (시작 대비)</th>
+    </tr></thead>
+    <tbody>${rows.map(r => `
+      <tr data-ticker="${escHtml(r.ticker)}">
+        <td>${escHtml(r.ticker)}</td>
+        <td>${escHtml(r.name)}</td>
+        <td><span class="legend-pill" style="background:${REGION_COLORS[r.region]||'#666'}">${r.region}</span></td>
+        <td class="num">${fmtInt(r.qty)}</td>
+        <td class="num">${fmtInt(r.value)}</td>
+        <td class="num">${fmt(r.w2, 2)}%</td>
+        <td class="num ${sgn(r.delta)}">${r.delta == null ? 'NEW' : fmtPct(r.delta, 2) + 'p'}</td>
+      </tr>`).join('')}
+    </tbody>`;
+  $('holdingsTable').innerHTML = html;
+  $('holdingsTable').querySelectorAll('tbody tr').forEach(tr => {
+    tr.addEventListener('click', () => {
+      $('holdingsTable').querySelectorAll('tbody tr').forEach(x => x.classList.remove('selected'));
+      tr.classList.add('selected');
+      renderDrilldown(tr.dataset.ticker);
+    });
+  });
+}
+
+function renderDrilldown(ticker) {
+  if (!ticker) {
+    $('drilldownChart').innerHTML = '<p class="muted">표에서 종목을 클릭하면 해당 종목의 비중·수량·평가금액 시계열이 표시됩니다.</p>';
+    return;
+  }
+  const i1 = state.i1, i2 = state.i2;
+  const dates = activeDates();
+  const w = DATA.series[ticker].weight.slice(i1, i2 + 1);
+  const q = DATA.series[ticker].qty.slice(i1, i2 + 1);
+  const v = DATA.series[ticker].value.slice(i1, i2 + 1);
+  Plotly.newPlot('drilldownChart', [
+    { x: dates, y: w, name: '비중 (%)', type: 'scatter', mode: 'lines', yaxis: 'y',  line: { color: '#3498db', width: 2 } },
+    { x: dates, y: q, name: '수량 (주)', type: 'scatter', mode: 'lines', yaxis: 'y2', line: { color: '#8e44ad', width: 1.5, dash: 'dot' } },
+    { x: dates, y: v, name: '평가금액 (원)', type: 'scatter', mode: 'lines', yaxis: 'y3', line: { color: '#16a085', width: 1.5, dash: 'dash' } },
+  ], {
+    title: { text: `${ticker} — ${DATA.tickers[ticker].name}`, font: { size: 14 } },
+    height: 380,
+    margin: { l: 60, r: 130, t: 40, b: 40 },
+    xaxis: { domain: [0, 0.86] },
+    yaxis:  { title: '비중 (%)',  titlefont: { color: '#3498db' }, tickfont: { color: '#3498db' } },
+    yaxis2: { title: '수량',      overlaying: 'y', side: 'right',                titlefont: { color: '#8e44ad' }, tickfont: { color: '#8e44ad' } },
+    yaxis3: { title: '평가금액',  overlaying: 'y', side: 'right', position: 0.97, titlefont: { color: '#16a085' }, tickfont: { color: '#16a085' } },
+    legend: { orientation: 'h', y: -0.15 },
+    connectgaps: false,
+  }, { responsive: true });
+}
+
+// ===== ⑦ Heatmap =====
+function renderHeatmap() {
+  const i1 = state.i1, i2 = state.i2;
+  const dates = activeDates();
+  const tickers = Object.keys(DATA.series).filter(t => t !== '__CASH__');
+  const meanW = tickers.map(t => {
+    let s = 0, c = 0;
+    for (let i = i1; i <= i2; i++) {
+      const w = DATA.series[t].weight[i];
+      if (w != null) { s += w; c++; }
+    }
+    return c > 0 ? s / c : 0;
+  });
+  const sorted = tickers.map((t, i) => ({ t, m: meanW[i] })).sort((a, b) => b.m - a.m).slice(0, 30);
+  const yLabels = sorted.map(x => `${tickerShort(x.t)} ${DATA.tickers[x.t].name}`.substring(0, 28));
+  const z = sorted.map(x => DATA.series[x.t].weight.slice(i1, i2 + 1));
+  Plotly.newPlot('heatmapChart', [{
+    z, x: dates, y: yLabels,
+    type: 'heatmap', colorscale: 'YlOrRd', hoverongaps: false,
+    colorbar: { title: '비중 %' },
+    hovertemplate: '%{y}<br>%{x}: %{z:.2f}%<extra></extra>',
+  }], {
+    height: 620,
+    margin: { l: 220, r: 80, t: 10, b: 40 },
+    yaxis: { autorange: 'reversed', tickfont: { size: 10 } },
+    xaxis: { tickfont: { size: 10 } },
+  }, { responsive: true });
+}
+
+// ===== ⑧ Region =====
+function renderRegion() {
+  const i1 = state.i1, i2 = state.i2;
+  const dates = activeDates();
+  const n = dates.length;
+  const regions = {};
+  for (const t in DATA.tickers) {
+    const r = DATA.tickers[t].region;
+    if (!regions[r]) regions[r] = new Array(n).fill(0);
+    const arr = DATA.series[t].weight;
+    for (let k = 0; k < n; k++) {
+      const w = arr[i1 + k];
+      if (w != null) regions[r][k] += w;
+    }
+  }
+  const order = ['US', 'KR', 'HK', 'JP', 'CN', 'Fund', 'Other', 'Cash'];
+  const present = order.filter(r => regions[r] && regions[r].some(x => x > 0));
+  const traces = present.map(r => ({
+    x: dates, y: regions[r], name: r,
+    type: 'scatter', mode: 'lines', stackgroup: 'one',
+    line: { width: 0.5 }, fillcolor: REGION_COLORS[r] || '#999',
+  }));
+  Plotly.newPlot('regionChart', traces, {
+    height: 380,
+    margin: { l: 50, r: 20, t: 10, b: 40 },
+    yaxis: { title: '비중 합 (%)', range: [0, 105] },
+    legend: { orientation: 'h', y: -0.15 },
+    hovermode: 'x unified',
+  }, { responsive: true });
+}
+
+// ===== ⑨ Data Quality =====
+function renderDataQuality() {
+  const m = DATA.missing_dates, inv = DATA.invalid_dates;
+  $('dataQuality').innerHTML = `
+    <p>전체 수집: <b>${DATA.meta.first_date} ~ ${DATA.meta.last_date}</b> (${DATA.meta.n_dates}일)</p>
+    <p>${m.length === 0 ? '<span style="color:#16a085">✓ 누락된 영업일 없음</span>' : `<span class="warn">⚠ 누락된 영업일: ${m.length}일 (휴장일 가능성)</span>`}</p>
+    ${m.length ? `<details><summary>누락 일자 보기 (${m.length})</summary><ul>${m.map(d => `<li>${d}</li>`).join('')}</ul></details>` : ''}
+    <p>${inv.length === 0 ? '<span style="color:#16a085">✓ 비중 합계 모든 날 정상 (≈ 100%)</span>' : `<span class="warn">⚠ 비중 합계 이상치: ${inv.length}일</span>`}</p>
+    ${inv.length ? `<details><summary>이상 일자 보기 (${inv.length})</summary><ul>${inv.map(([d,s]) => `<li>${d}: 합계 ${s}%</li>`).join('')}</ul></details>` : ''}
+    <p class="muted">data.js 생성 시각: ${ROOT.generated_at || '-'}</p>
+  `;
+}
+
+// ===== ⑩ CSV =====
+function exportCsv() {
+  const i1 = state.i1, i2 = state.i2;
+  const rows = [['date', 'ticker', 'name', 'region', 'qty', 'value_krw', 'weight_pct']];
+  for (let i = i1; i <= i2; i++) {
+    const date = DATA.dates[i];
+    for (const t in DATA.series) {
+      const w = DATA.series[t].weight[i];
+      if (w == null) continue;
+      rows.push([
+        date, t, DATA.tickers[t].name, DATA.tickers[t].region,
+        DATA.series[t].qty[i], DATA.series[t].value[i], w,
+      ]);
+    }
+  }
+  const csv = rows.map(r => r.map(v => {
+    if (v == null) return '';
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }).join(',')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `timeetf_holdings_${DATA.dates[i1]}_${DATA.dates[i2]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+init();
+</script>
+</body>
+</html>
