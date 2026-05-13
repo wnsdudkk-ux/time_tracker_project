@@ -478,7 +478,7 @@ async function callGemini(prompt) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
+      generationConfig: { temperature: 0.4, maxOutputTokens: 8192 },
     }),
   });
   const data = await res.json();
@@ -612,17 +612,19 @@ ${text}
 
 위 데이터를 바탕으로 다음 4개 섹션의 종합 분석 보고서를 한국어로 작성해 주세요. 마크다운 형식 사용.
 
+**분량 지시: 각 섹션을 충분히 깊이 있게 풀어서, 보고서 전체 분량을 약 3,000~4,500자(기존 분량의 3배 수준)로 작성. 단순 요약이 아닌 데이터 근거와 해석을 함께 제시.**
+
 ## 1. 운용 핵심 요약
-한 단락으로 펀드의 운용 방향성과 주요 변화를 정리.
+2~3 단락으로 펀드의 운용 방향성, 주요 변화, 그리고 그 변화가 의미하는 바를 풍부하게 정리. 단순 사실 나열이 아니라 매니저의 운용 철학·의사결정 흐름을 추론.
 
 ## 2. 주요 포지션 변화
-Top movers와 신규 편입/퇴출이 시사하는 매니저의 의도. 구체적 종목명 인용.
+Top movers와 신규 편입/퇴출이 시사하는 매니저의 의도를 종목별로 깊이 분석. 구체적 종목명을 반드시 인용하고, 각 종목의 산업·테마·시장 맥락을 함께 설명. 비중 변화 폭이 큰 상위 5~10개 종목에 대해 각각 2~4 문장씩 해석.
 
 ## 3. 투자 테마 / 섹터·지역 변화
-종목 분포·지역 변화에서 드러나는 투자 테마와 로테이션.
+종목 분포·지역 변화에서 드러나는 투자 테마와 로테이션을 다층적으로 분석. 어떤 테마가 부상하고 어떤 테마가 후퇴하는지, 지역 비중 변화가 거시 경제·정책 환경과 어떻게 연결되는지 구체적으로 서술. 최소 3~5개 테마/축에 대해 각각 한 단락씩.
 
 ## 4. 주목할 만한 점 / 리스크
-포트폴리오 집중도, 회전율, AUM 변화의 특이사항. 잠재 리스크.`;
+포트폴리오 집중도, 회전율, 현금 비중, AUM 변화의 특이사항을 정량적·정성적으로 모두 짚어주고, 잠재 리스크 요인을 최소 4~6가지 도출. 각 리스크에 대해 시나리오와 모니터링 포인트까지 제시.`;
 
   btn.disabled = true;
   status.textContent = '⏳ Gemini Flash 호출 중... (5~15초)';
@@ -660,17 +662,19 @@ ${combined}
 
 위 데이터를 바탕으로 4개 펀드의 통합 비교 분석 보고서를 한국어 마크다운으로 작성해 주세요.
 
-## 1. 펀드별 핵심 변화 (한 줄씩)
-각 펀드의 가장 중요한 1~2가지 변화.
+**분량 지시: 각 섹션을 충분히 깊이 있게 풀어서, 보고서 전체 분량을 약 3,500~5,000자(기존 분량의 3배 수준)로 작성. 단순 요약이 아닌 4개 펀드 간 비교 분석과 데이터 근거를 함께 제시.**
+
+## 1. 펀드별 핵심 변화 (펀드당 2~3 단락)
+각 펀드별로 2~3 단락씩 가장 중요한 변화 3~5가지를 정리. AUM 흐름, 핵심 종목 이동, 회전율, 현금 비중 등 정량 지표를 함께 인용하고, 그 변화가 매니저의 어떤 판단을 반영하는지 해석.
 
 ## 2. 공통 보유 종목 / 공통 테마
-여러 펀드에서 동시에 비중이 늘거나 줄어든 종목, 공통 투자 테마.
+여러 펀드에서 동시에 비중이 늘거나 줄어든 종목을 구체적으로 나열하고, 그 배경(공통 테마, 매크로 환경, 산업 사이클 등)을 분석. 최소 5~8개의 공통 종목/테마를 짚고, 각각에 대해 한 단락씩 해석. 공통점과 함께 펀드별 가중치 차이도 비교.
 
 ## 3. 펀드 간 차별화된 전략
-각 펀드의 특색 있는 매니저 액션.
+각 펀드의 특색 있는 매니저 액션을 펀드별로 한 단락 이상씩 분석. 같은 시장 환경에서 왜 펀드별 액션이 갈렸는지, 어떤 펀드가 공격적이고 어떤 펀드가 방어적인지, 지역·테마 노출의 차이가 어떤 시그널을 주는지 구체적으로 비교.
 
 ## 4. 종합 시사점 / 시장 관점
-4개 펀드 데이터에서 읽히는 시장 흐름·매니저 컨센서스 또는 분기점.`;
+4개 펀드 데이터에서 읽히는 시장 흐름·매니저 컨센서스 또는 분기점을 다각도로 정리. 합의된 방향성, 의견이 갈리는 영역, 향후 모니터링 포인트, 거시 시나리오별 영향 등을 최소 4~6개 항목으로 제시. 마지막에 투자자 관점에서의 종합 판단을 한 단락으로 마무리.`;
 
   btn.disabled = true;
   status.textContent = '⏳ 4개 펀드 통합 분석 중... (10~25초)';
@@ -1179,11 +1183,39 @@ function findEntriesExits() {
         const dEntry = new Date(DATA.dates[cycleStart]);
         const dExit  = new Date(DATA.dates[i - 1]);
         const heldDays = Math.round((dExit - dEntry) / 86400000) + 1;
+
+        // 가격 = value / qty (펀드 보유분 평가액 / 수량 → 주당 단가, 펀드 기준통화)
+        const vSer = DATA.series[t].value;
+        const qSer = DATA.series[t].qty;
+        const priceAt = k => {
+          const v = vSer[k], q = qSer[k];
+          return (v != null && q != null && q > 0) ? v / q : null;
+        };
+        // 사이클 시작·종료에서 가장 가까운 유효 가격을 잡음
+        let pEntry = null, pEntryIdx = cycleStart;
+        for (let k = cycleStart; k <= i - 1; k++) {
+          const p = priceAt(k);
+          if (p != null) { pEntry = p; pEntryIdx = k; break; }
+        }
+        let pExit = null, pExitIdx = i - 1;
+        for (let k = i - 1; k >= cycleStart; k--) {
+          const p = priceAt(k);
+          if (p != null) { pExit = p; pExitIdx = k; break; }
+        }
+        const returnPct = (pEntry != null && pExit != null && pEntry > 0)
+          ? (pExit / pEntry - 1) * 100 : null;
+        // 일별 가격 시리즈 (호버 차트용)
+        const priceSeries = [];
+        for (let k = cycleStart; k <= i - 1; k++) {
+          priceSeries.push({ date: DATA.dates[k], price: priceAt(k) });
+        }
         exits.push({
           date: DATA.dates[i-1], ticker: t, name: DATA.tickers[t].name,
           weight: w[i-1], lastAppearance,
           entryDate: DATA.dates[cycleStart],
           heldDays,
+          priceEntry: pEntry, priceExit: pExit, returnPct,
+          priceSeries,
         });
       }
     }
@@ -1215,19 +1247,25 @@ function renderEntriesExits() {
         </tbody></table></div>
         <p class="muted" style="margin-top:6px;">총 ${entries.length}건</p>`;
 
+  window._exitData = exits; // 호버 차트가 참조
   $('exitsContainer').innerHTML = exits.length === 0
     ? '<p class="muted">기간 내 해당 없음</p>'
     : `<div class="scroll-tbl"><table>
         <thead><tr>
           <th>퇴출일(마지막 등장)</th><th>편입일</th><th class="num">보유일수</th>
+          <th class="num">추정 수익률</th>
           <th>종목코드</th><th>종목명</th><th>지역</th>
           <th class="num">직전 비중</th><th>완전 퇴출</th>
         </tr></thead>
-        <tbody>${exits.map(e => `
-          <tr>
+        <tbody>${exits.map((e, i) => `
+          <tr class="exit-row" data-exit-idx="${i}"
+              onmouseenter="onExitRowEnter(${i}, event)"
+              onmousemove="onExitRowMove(event)"
+              onmouseleave="hideExitChart()">
             <td>${e.date}</td>
             <td>${e.entryDate}</td>
             <td class="num">${e.heldDays}일</td>
+            <td class="num ${sgn(e.returnPct)}" title="편입가 ${e.priceEntry!=null?fmt(e.priceEntry,2):'-'} → 퇴출가 ${e.priceExit!=null?fmt(e.priceExit,2):'-'} (펀드 기준통화)">${e.returnPct != null ? fmtPct(e.returnPct, 1) : '-'}</td>
             <td>${escHtml(e.ticker)}</td>
             <td>${escHtml(e.name)}</td>
             <td>${DATA.tickers[e.ticker].region}</td>
@@ -1235,7 +1273,68 @@ function renderEntriesExits() {
             <td>${e.lastAppearance ? '완전' : '재진입함'}</td>
           </tr>`).join('')}
         </tbody></table></div>
-        <p class="muted" style="margin-top:6px;">총 ${exits.length}건</p>`;
+        <p class="muted" style="margin-top:6px;">총 ${exits.length}건 · 행에 커서를 올리면 보유 기간 가격 차트가 표시됩니다. (가격 = 보유평가액 ÷ 수량, 펀드 기준통화 기준)</p>`;
+}
+
+// ===== 퇴출 행 호버 — 미니 가격 차트 툴팁 =====
+function _ensureExitTooltip() {
+  let el = document.getElementById('exitChartTooltip');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'exitChartTooltip';
+    el.style.cssText = 'display:none;position:fixed;z-index:9999;background:#fff;border:1px solid #ccc;border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,0.18);padding:6px;width:360px;height:220px;pointer-events:none;';
+    document.body.appendChild(el);
+  }
+  return el;
+}
+function _positionExitTooltip(event) {
+  const el = _ensureExitTooltip();
+  const W = 360, H = 220, pad = 14;
+  let x = event.clientX + pad;
+  let y = event.clientY + pad;
+  if (x + W > window.innerWidth)  x = event.clientX - W - pad;
+  if (y + H > window.innerHeight) y = event.clientY - H - pad;
+  el.style.left = Math.max(0, x) + 'px';
+  el.style.top  = Math.max(0, y) + 'px';
+}
+function onExitRowEnter(idx, event) {
+  const exit = (window._exitData || [])[idx];
+  if (!exit) return;
+  const el = _ensureExitTooltip();
+  const pts = exit.priceSeries.filter(p => p.price != null);
+  if (pts.length < 2) {
+    el.innerHTML = `<div style="padding:14px;font-size:12px;color:#666;">${escHtml(exit.ticker)} ${escHtml(exit.name)}<br>가격 데이터 부족 (보유 기간 ${exit.heldDays}일)</div>`;
+    _positionExitTooltip(event);
+    el.style.display = 'block';
+    return;
+  }
+  _positionExitTooltip(event);
+  el.style.display = 'block';
+  const color = (exit.returnPct ?? 0) >= 0 ? '#16a34a' : '#dc2626';
+  const retTxt = exit.returnPct != null ? fmtPct(exit.returnPct, 1) : '-';
+  Plotly.newPlot(el, [{
+    x: pts.map(p => p.date),
+    y: pts.map(p => p.price),
+    type: 'scatter', mode: 'lines',
+    line: { color, width: 2 },
+    hoverinfo: 'skip',
+  }], {
+    title: { text: `${exit.ticker} · ${exit.name} · ${retTxt}`, font: { size: 11 } },
+    margin: { l: 56, r: 10, t: 26, b: 32 },
+    xaxis: { tickfont: { size: 9 }, nticks: 4 },
+    yaxis: { tickfont: { size: 9 }, tickformat: ',.0f' },
+    height: 218, width: 358,
+    showlegend: false,
+    paper_bgcolor: '#fff', plot_bgcolor: '#fafafa',
+  }, { displayModeBar: false, staticPlot: true });
+}
+function onExitRowMove(event) {
+  const el = document.getElementById('exitChartTooltip');
+  if (el && el.style.display === 'block') _positionExitTooltip(event);
+}
+function hideExitChart() {
+  const el = document.getElementById('exitChartTooltip');
+  if (el) el.style.display = 'none';
 }
 
 // ===== ⑥ Holdings table + Drilldown =====
