@@ -14,7 +14,7 @@ echo.
 echo === [3/3] Build trajectory.js (uses cached prices.json) ===
 python build_trajectory.py
 echo.
-echo (매매궤적 주가 갱신은 prices.bat 실행 — 자세한 내용은 README)
+echo (To refresh trajectory stock prices, run prices.bat)
 echo.
 echo === Open index.html ===
 start "" "index.html"
