@@ -25,3 +25,10 @@ Thumbs.db
 *.tmp
 *.bak
 *~
+_ref_logic.txt
+data/*.zip
+
+# ─── 가격 캐시 (yfinance, 재생성 가능) ───────────────────
+price_cache/
+prices.json
+fetch_prices.log

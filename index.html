@@ -5,6 +5,7 @@
 <title>TIME ETF 구성종목 트래커</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script src="data.js"></script>
+<script src="trajectory.js"></script>
 <script src="keys.js"></script>
 <style>
 * { box-sizing: border-box; }
@@ -151,6 +152,31 @@ details ul { margin: 8px 0; padding-left: 24px; max-height: 220px; overflow-y: a
 
 .cross-kpi-table table { font-size: 12px; }
 .cross-kpi-table th, .cross-kpi-table td { padding: 6px 8px; }
+
+/* ⑪ 매매 궤적 */
+.traj-controls { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.traj-controls select {
+  flex: 1; max-width: 560px; padding: 6px 10px; font-size: 13px;
+  border: 1px solid #ccc; border-radius: 4px;
+}
+.traj-controls button {
+  padding: 6px 12px; border: 1px solid #ccc; background: #fff;
+  border-radius: 4px; cursor: pointer; font-size: 13px;
+}
+.traj-controls button:hover { background: #eef3ff; border-color: #2a6df4; color: #2a6df4; }
+.traj-stat {
+  display: flex; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 10px;
+  font-size: 13px; color: #444;
+}
+.traj-stat b { color: #1a1a1a; font-variant-numeric: tabular-nums; }
+.traj-stat .badge {
+  display: inline-block; padding: 1px 8px; border-radius: 10px;
+  font-size: 11px; color: #fff; margin-left: 6px;
+}
+.traj-stat .badge.cur  { background: #16a085; }
+.traj-stat .badge.past { background: #95a5a6; }
+.traj-stat .gain { color: #c0392b; font-weight: 600; }
+.traj-stat .loss { color: #2980b9; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -203,7 +229,8 @@ details ul { margin: 8px 0; padding-left: 24px; max-height: 220px; overflow-y: a
     </p>
     <div class="mode-toggle">
       <span>표시:</span>
-      <label><input type="radio" name="weightMode" value="net" checked> Net 변화 (시작 = 0)</label>
+      <label><input type="radio" name="weightMode" value="active" checked> 능동 누적 (매니저 매매)</label>
+      <label><input type="radio" name="weightMode" value="net"> Net 변화 (시작 = 0)</label>
       <label><input type="radio" name="weightMode" value="gross"> Gross 비중</label>
       <label><input type="radio" name="weightMode" value="qty"> 주수 변화율</label>
     </div>
@@ -215,7 +242,8 @@ details ul { margin: 8px 0; padding-left: 24px; max-height: 220px; overflow-y: a
     <p class="desc">기간 양 끝점에 모두 존재하는 종목 중 변동 상위/하위 10.</p>
     <div class="mode-toggle">
       <span>기준:</span>
-      <label><input type="radio" name="moverMode" value="net" checked> Net Δ비중 (%p, 절대)</label>
+      <label><input type="radio" name="moverMode" value="active" checked> 능동 Δ (매니저 매매, %p)</label>
+      <label><input type="radio" name="moverMode" value="net"> Net Δ비중 (%p, 절대)</label>
       <label><input type="radio" name="moverMode" value="gross"> Gross 비중 변화율 (%, 상대)</label>
       <label><input type="radio" name="moverMode" value="qty"> 주수 변화율 (%)</label>
     </div>
@@ -266,6 +294,24 @@ details ul { margin: 8px 0; padding-left: 24px; max-height: 220px; overflow-y: a
   </section>
 
   <section>
+    <h2>⑪ 종목별 매매 궤적 <span class="muted" style="font-size:12px;font-weight:400;">(현재 보유 + 과거 청산 전 종목)</span></h2>
+    <p class="desc">
+      현지통화 <b>수정주가</b>(yfinance)에 매니저의 <b>능동 매수·매도</b>를 겹쳐 봅니다.
+      능동 %p = 비중변화에서 <b>가격효과·펀드 자금유출입(패시브 스케일링)을 제거</b>한 순수 매니저 액션.
+      평균단가는 능동 매수가 일어난 가격의 가중평균(추정). 점이 클수록 큰 능동 매매.
+    </p>
+    <div class="traj-controls">
+      <button id="trajPrev" title="이전 종목">◀</button>
+      <select id="trajSelect"></select>
+      <button id="trajNext" title="다음 종목">▶</button>
+    </div>
+    <div id="trajStat" class="traj-stat"></div>
+    <div id="trajChart1"></div>
+    <div id="trajChart2"></div>
+    <div id="trajEmpty" class="muted" style="display:none;">가격 데이터가 연계된 종목이 없습니다. <code>fetch_prices.py</code> → <code>build_trajectory.py</code> 실행 후 새로고침하세요.</div>
+  </section>
+
+  <section>
     <h2>⑨ 데이터 무결성</h2>
     <div id="dataQuality"></div>
   </section>
@@ -295,12 +341,12 @@ details ul { margin: 8px 0; padding-left: 24px; max-height: 220px; overflow-y: a
   </section>
 
   <section>
-    <h2>펀드별 Top 5 비중 증가</h2>
+    <h2>펀드별 능동 순매수 Top 5 <span class="muted" style="font-size:12px;font-weight:400;">(가격·자금흐름 제거)</span></h2>
     <div id="crossTopUp"></div>
   </section>
 
   <section>
-    <h2>펀드별 Top 5 비중 감소</h2>
+    <h2>펀드별 능동 순매도 Top 5 <span class="muted" style="font-size:12px;font-weight:400;">(가격·자금흐름 제거)</span></h2>
     <div id="crossTopDown"></div>
   </section>
 </div><!-- /crossEtfView -->
@@ -394,6 +440,7 @@ function switchEtf(i) {
   $('etfReportStatus').textContent = '';
   setupDates();
   apply();
+  buildTrajectorySection();
   if (same) { /* noop */ }
 }
 
@@ -510,10 +557,9 @@ function buildEtfSnapshot(etf, i1, i2) {
   const movers = [];
   for (const t in series) {
     if (t === '__CASH__') continue;
-    const w1 = series[t].weight[i1], w2 = series[t].weight[i2];
-    if (w1 != null && w2 != null) {
-      movers.push({ ticker: t, name: etf.tickers[t].name, w1, w2, delta: w2 - w1 });
-    }
+    const a = activeTotalAt(etf, t, i1, i2);   // 능동 순매매(가격·자금흐름 제거)
+    if (a == null) continue;
+    movers.push({ ticker: t, name: etf.tickers[t].name, w1: series[t].weight[i1], w2: series[t].weight[i2], delta: a });
   }
   movers.sort((a, b) => b.delta - a.delta);
   const topUp = movers.slice(0, 5);
@@ -581,10 +627,11 @@ function formatSnapshot(s, name) {
   t += `보유 종목: ${s.holdingsCount} | 상위10 집중도 ${s.top10Conc.toFixed(1)}% | 현금 ${s.cashEnd.toFixed(1)}% | 회전율 ${s.turnover.toFixed(1)}%\n\n`;
   t += `## 종료일 상위 10 종목\n`;
   for (const h of s.topHoldings) t += `- ${h.ticker} ${h.name} (${h.region}) ${h.weight.toFixed(2)}%\n`;
-  t += `\n## Top 5 비중 증가 (Net Δ)\n`;
-  for (const m of s.topUp) t += `- ${m.ticker} ${m.name}: ${m.w1.toFixed(2)}% → ${m.w2.toFixed(2)}% (${m.delta >= 0 ? '+' : ''}${m.delta.toFixed(2)}%p)\n`;
-  t += `\n## Top 5 비중 감소 (Net Δ)\n`;
-  for (const m of s.topDown) t += `- ${m.ticker} ${m.name}: ${m.w1.toFixed(2)}% → ${m.w2.toFixed(2)}% (${m.delta.toFixed(2)}%p)\n`;
+  const ww = w => w != null ? w.toFixed(2) + '%' : '-';
+  t += `\n## 능동 순매수 Top 5 (가격·자금흐름 제거)\n`;
+  for (const m of s.topUp) t += `- ${m.ticker} ${m.name}: ${ww(m.w1)} → ${ww(m.w2)} (능동 ${m.delta >= 0 ? '+' : ''}${m.delta.toFixed(2)}%p)\n`;
+  t += `\n## 능동 순매도 Top 5 (가격·자금흐름 제거)\n`;
+  for (const m of s.topDown) t += `- ${m.ticker} ${m.name}: ${ww(m.w1)} → ${ww(m.w2)} (능동 ${m.delta.toFixed(2)}%p)\n`;
   t += `\n## 신규 편입 (${s.entries.length}건, 최근 8건)\n`;
   for (const e of s.entries.slice(-8)) t += `- ${e.date} ${e.ticker} ${e.name} (편입 ${e.weight.toFixed(2)}%)\n`;
   t += `\n## 신규 퇴출 (${s.exits.length}건, 최근 8건)\n`;
@@ -758,6 +805,9 @@ function init() {
     r.addEventListener('change', renderWeightChart));
   document.querySelectorAll('input[name="moverMode"]').forEach(r =>
     r.addEventListener('change', renderTopMovers));
+  $('trajSelect').addEventListener('change', () => renderTrajStock($('trajSelect').value));
+  $('trajPrev').addEventListener('click', () => { const n = trajState.items.length; if (!n) return; trajState.cur = (trajState.cur - 1 + n) % n; renderTrajStock(trajState.items[trajState.cur].t); });
+  $('trajNext').addEventListener('click', () => { const n = trajState.items.length; if (!n) return; trajState.cur = (trajState.cur + 1) % n; renderTrajStock(trajState.items[trajState.cur].t); });
   document.querySelectorAll('.preset[data-days]').forEach(btn => {
     btn.addEventListener('click', () => {
       const days = parseInt(btn.dataset.days);
@@ -810,6 +860,87 @@ const priceAt = (t, i) => {
   const v = valueAt(t, i), q = qtyAt(t, i);
   return (v != null && q != null && q > 0) ? v / q : null;
 };
+
+const CCY_SYM = { USD:'$', KRW:'₩', JPY:'¥', HKD:'HK$', CNY:'¥', EUR:'€', GBP:'£', TWD:'NT$' };
+
+// ===== 능동 비중분해 (요구사항 #3: 가격효과·자금유출입 제거) =====
+// 직전일 보유주식(qty[i-1])을 당일 가격으로 평가한 '무거래 포트폴리오'의 비중과
+// 실제 비중의 차이 = 능동 %p. 분모를 각자 정규화하므로 펀드 자금유출입(전체 비례
+// 스케일링)은 자동 상쇄되고, 가격 변동분도 제거된다. ETF별 1회 계산 후 캐시.
+function getActiveDaily(etf) {
+  if (etf._activeDaily) return etf._activeDaily;
+  const S = etf.series, n = etf.dates.length;
+  const allT = Object.keys(S);
+  // base = 현금·현금성자산·지수선물 → 주식수 기반 매매 대상 아님. 양쪽 분모에 동일 포함.
+  const isBase = t => t === '__CASH__' || /CASH/i.test(t) || /\sINDEX$/i.test(t);
+  const shareT = allT.filter(t => !isBase(t));
+  // 소스 평가액 글리치(1일 급등 후 복귀, 예: 분할일 평가액 미수정) → median-3 보정.
+  // 이렇게 평가액을 정상화하면 아래 액면분할 가드가 주식수 급변을 올바로 잡는다.
+  const V = {};
+  for (const t of allT) {
+    const raw = S[t].value, c = raw.slice();
+    if (!isBase(t)) {
+      for (let i = 1; i < n - 1; i++) {
+        const a = raw[i-1], b = raw[i], d = raw[i+1];
+        if (a != null && b != null && d != null && a > 0 && d > 0) {
+          const r1 = b / a, r2 = b / d;
+          if ((r1 > 3 && r2 > 3) || (r1 < 0.34 && r2 < 0.34)) c[i] = [a, b, d].sort((x, y) => x - y)[1];
+        }
+      }
+    }
+    V[t] = c;
+  }
+  const out = {};
+  for (const t of shareT) out[t] = new Array(n).fill(null);
+  for (let i = 1; i < n; i++) {
+    const ntv = {};
+    let aumA = 0, aumN = 0;
+    for (const t of allT) {
+      const vi = V[t][i], qi = S[t].qty[i];
+      const vP = V[t][i-1], qP = S[t].qty[i-1];
+      if (vi != null) aumA += vi;
+      let v = null;
+      if (isBase(t)) {
+        v = vi != null ? vi : vP;                        // base: 무거래=현재가치(패시브)
+      } else if (qP != null && qP > 0) {                 // 전일 보유 주식
+        const pi = (vi != null && qi != null && qi > 0) ? vi / qi : null;
+        // 액면분할 가드: 평가액은 그대로인데 주식수만 크게 변하면 split → 무거래로 간주
+        const rq = (qi != null && qi > 0) ? qi / qP : null;
+        const rv = (vi != null) ? vi / vP : null;
+        const isSplit = rq != null && rv != null && Math.abs(rv - 1) < 0.25 && Math.abs(rq - 1) > 0.5;
+        v = isSplit ? vP : (pi != null ? qP * pi : (vP != null ? vP : null));  // 완전청산→vP 근사
+      } else if ((qi == null || qi <= 0) && (vi != null || vP != null)) {
+        v = vi != null ? vi : vP;                        // 주식수 없는 평가액 보유분 → base 취급
+      }
+      // else: 신규 편입(전일 미보유) → v=null → wN=0 → active=+편입비중
+      if (v != null) { ntv[t] = v; aumN += v; }
+    }
+    if (aumA <= 0 || aumN <= 0) continue;
+    for (const t of shareT) {
+      const vi = V[t][i];
+      if (vi == null && ntv[t] == null) continue;
+      const wA = vi != null ? vi / aumA * 100 : 0;
+      const wN = ntv[t] != null ? ntv[t] / aumN * 100 : 0;
+      out[t][i] = wA - wN;
+    }
+  }
+  etf._activeDaily = out;
+  return out;
+}
+// 기간 [i1,i2] 누적 능동 %p (시작=0) 시계열
+function activeCumSeries(etf, t, i1, i2) {
+  const A = getActiveDaily(etf)[t];
+  const out = []; let s = 0;
+  for (let i = i1; i <= i2; i++) { if (i > i1 && A && A[i] != null) s += A[i]; out.push(s); }
+  return out;
+}
+// 기간 [i1,i2] 능동 %p 합계
+function activeTotalAt(etf, t, i1, i2) {
+  const A = getActiveDaily(etf)[t]; if (!A) return null;
+  let s = 0, any = false;
+  for (let i = Math.max(1, i1 + 1); i <= i2; i++) if (A[i] != null) { s += A[i]; any = true; }
+  return any ? s : null;
+}
 
 // ===== KPI =====
 function renderKPIs() {
@@ -967,7 +1098,12 @@ function renderWeightChart() {
   const top = ts.slice(0, 10);
 
   let yTitle, getY, hoverFmt, valSuffix;
-  if (mode === 'net') {
+  if (mode === 'active') {
+    yTitle = '능동 누적 비중조절 (시작 = 0, %p)';
+    valSuffix = '%p';
+    getY = t => activeCumSeries(DATA, t, i1, i2);
+    hoverFmt = '%{y:+.2f}%p';
+  } else if (mode === 'net') {
     yTitle = 'Net Δ비중 (시작 = 0, %p)';
     valSuffix = '%p';
     getY = t => {
@@ -1055,7 +1191,9 @@ function renderTopMovers() {
     const w1 = weightAt(t, i1), w2 = weightAt(t, i2);
     const q1 = qtyAt(t, i1), q2 = qtyAt(t, i2);
     let delta = null;
-    if (mode === 'net') {
+    if (mode === 'active') {
+      delta = activeTotalAt(DATA, t, state.i1, state.i2);
+    } else if (mode === 'net') {
       if (w1 != null && w2 != null) delta = w2 - w1;
     } else if (mode === 'gross') {
       if (w1 != null && w2 != null && w1 > 0) delta = (w2 / w1 - 1) * 100;
@@ -1071,6 +1209,7 @@ function renderTopMovers() {
   const downs = movers.slice(-10).reverse();
 
   const cfg = {
+    active:{ unit: '%p', axis: '능동 Δ비중 (매니저 매매, %p)', dec: 2, hover: t => `비중 ${t.w1!=null?fmt(t.w1,2)+'%':'-'} → ${t.w2!=null?fmt(t.w2,2)+'%':'-'}` },
     net:   { unit: '%p', axis: 'Net Δ비중 (%p)',          dec: 2, hover: t => `${fmt(t.w1,2)}% → ${fmt(t.w2,2)}%` },
     gross: { unit: '%',  axis: 'Gross 비중 변화율 (%, 상대)', dec: 1, hover: t => `${fmt(t.w1,2)}% → ${fmt(t.w2,2)}%` },
     qty:   { unit: '%',  axis: '주수 변화율 (%)',           dec: 1, hover: t => `${fmtInt(t.q1)} → ${fmtInt(t.q2)} 주` },
@@ -1098,7 +1237,7 @@ function renderTopMovers() {
   bar('topDownChart', downs, '상위 10 ↓', '#2980b9');
 }
 
-// ===== ⑤ Net Δweight (passive scaling = 0) =====
+// ===== ③ 능동 비중조절 (가격·자금흐름 제거) =====
 function renderQtyPrice() {
   const i1 = state.i1, i2 = state.i2;
   const aum1 = totalAumAt(i1), aum2 = totalAumAt(i2);
@@ -1107,45 +1246,41 @@ function renderQtyPrice() {
   const items = [];
   for (const t in DATA.series) {
     if (t === '__CASH__') continue;
-    const w1 = weightAt(t, i1), w2 = weightAt(t, i2);
-    if (w1 != null && w2 != null) {
-      items.push({
-        ticker: t, name: DATA.tickers[t].name,
-        w1, w2, deltaW: w2 - w1,
-      });
-    }
+    const act = activeTotalAt(DATA, t, i1, i2);
+    if (act == null) continue;
+    const w2 = weightAt(t, i2);
+    items.push({ ticker: t, name: DATA.tickers[t].name, active: act, wEnd: w2 != null ? w2 : 0 });
   }
-  items.sort((a, b) => b.w2 - a.w2);
+  items.sort((a, b) => b.wEnd - a.wEnd);
   const top = items.slice(0, 15);
-  top.sort((a, b) => b.deltaW - a.deltaW);
+  top.sort((a, b) => b.active - a.active);
 
   if (top.length === 0) {
-    $('qtyPriceChart').innerHTML = '<p class="muted">기간 양 끝점에 동시에 존재하는 종목이 없습니다.</p>';
+    $('qtyPriceChart').innerHTML = '<p class="muted">기간 내 능동 매매가 감지된 종목이 없습니다.</p>';
     return;
   }
   const labels = top.map(m => `${tickerShort(m.ticker)} ${m.name}`.substring(0, 28));
-  const colors = top.map(m => m.deltaW >= 0 ? '#c0392b' : '#2980b9');
+  const colors = top.map(m => m.active >= 0 ? '#c0392b' : '#2980b9');
 
   Plotly.newPlot('qtyPriceChart', [{
     type: 'bar', orientation: 'h',
-    x: top.map(m => m.deltaW),
+    x: top.map(m => m.active),
     y: labels,
     marker: { color: colors },
-    customdata: top.map(m => [m.w1, m.w2]),
-    text: top.map(m => fmtPct(m.deltaW, 2) + 'p'),
+    text: top.map(m => fmtPct(m.active, 2) + 'p'),
     textposition: 'outside',
-    hovertemplate: '<b>%{y}</b><br>%{customdata[0]:.2f}% → %{customdata[1]:.2f}%<br>Net Δ %{x:+.2f}%p<extra></extra>',
+    hovertemplate: '<b>%{y}</b><br>능동 순매매 %{x:+.2f}%p<extra></extra>',
   }], {
     height: 480,
     margin: { l: 200, r: 70, t: 30, b: 50 },
     yaxis: { autorange: 'reversed', tickfont: { size: 10 } },
     xaxis: {
-      title: `Net Δ비중 (%p)  ·  기간 AUM ${fmtPct(aumPct, 1)} (참고)`,
+      title: `능동 비중조절 (%p)  ·  기간 AUM ${fmtPct(aumPct, 1)} (참고)`,
       zeroline: true, zerolinewidth: 2, zerolinecolor: '#444',
     },
     annotations: [{
       x: 0, y: 1, xref: 'x', yref: 'paper',
-      text: '0 = 패시브 스케일링 (비중 그대로)',
+      text: '가격효과·자금유출입 제거 (순수 매니저 매매)',
       showarrow: false, yshift: 14,
       bgcolor: '#444', font: { color: 'white', size: 11 },
       borderpad: 4,
@@ -1346,7 +1481,8 @@ function renderHoldingsTable() {
     return {
       ticker: t, name: DATA.tickers[t].name, region: DATA.tickers[t].region,
       qty: qtyAt(t, i2), value: valueAt(t, i2), w2,
-      delta: (w1 != null && t !== '__CASH__') ? w2 - w1 : (t === '__CASH__' && w1 != null ? w2 - w1 : null),
+      // Δ = 기간 능동 비중조절(가격·자금흐름 제거). 현금은 능동 대상 아님 → net.
+      delta: t === '__CASH__' ? (w1 != null ? w2 - w1 : null) : activeTotalAt(DATA, t, i1, i2),
     };
   });
   rows.sort((a, b) => b.w2 - a.w2);
@@ -1354,7 +1490,7 @@ function renderHoldingsTable() {
     <thead><tr>
       <th>종목코드</th><th>종목명</th><th>지역</th>
       <th class="num">수량</th><th class="num">평가금액(원)</th>
-      <th class="num">비중</th><th class="num">Δ비중 (시작 대비)</th>
+      <th class="num">비중</th><th class="num" title="기간 능동 비중조절 (가격·자금흐름 제거)">능동 Δ (기간)</th>
     </tr></thead>
     <tbody>${rows.map(r => `
       <tr data-ticker="${escHtml(r.ticker)}">
@@ -1364,7 +1500,7 @@ function renderHoldingsTable() {
         <td class="num">${fmtInt(r.qty)}</td>
         <td class="num">${fmtInt(r.value)}</td>
         <td class="num">${fmt(r.w2, 2)}%</td>
-        <td class="num ${sgn(r.delta)}">${r.delta == null ? 'NEW' : fmtPct(r.delta, 2) + 'p'}</td>
+        <td class="num ${sgn(r.delta)}">${r.delta == null ? '-' : fmtPct(r.delta, 2) + 'p'}</td>
       </tr>`).join('')}
     </tbody>`;
   $('holdingsTable').innerHTML = html;
@@ -1402,6 +1538,122 @@ function renderDrilldown(ticker) {
     legend: { orientation: 'h', y: -0.15 },
     connectgaps: false,
   }, { responsive: true });
+}
+
+// ===== ⑪ 종목별 매매 궤적 =====
+const trajState = { items: [], cur: 0 };
+
+function trajForCurrentEtf() {
+  if (!window.TRAJ_DATA || !TRAJ_DATA.etfs) return null;
+  return TRAJ_DATA.etfs.find(e => e.idx === DATA.idx) || TRAJ_DATA.etfs[currentEtfIdx] || null;
+}
+
+function buildTrajectorySection() {
+  const sel = $('trajSelect');
+  const T = trajForCurrentEtf();
+  const codes = T ? Object.keys(T.px) : [];
+  if (!T || codes.length === 0) {
+    $('trajEmpty').style.display = 'block';
+    $('trajStat').innerHTML = '';
+    sel.innerHTML = ''; trajState.items = [];
+    Plotly.purge('trajChart1'); Plotly.purge('trajChart2');
+    return;
+  }
+  $('trajEmpty').style.display = 'none';
+  const lastIdx = DATA.dates.length - 1;
+  const items = codes.map(t => {
+    const w = DATA.series[t].weight;
+    let wmax = 0, lo = -1, hi = -1;
+    for (let i = 0; i < w.length; i++) {
+      if (w[i] != null) { if (lo < 0) lo = i; hi = i; if (w[i] > wmax) wmax = w[i]; }
+    }
+    const cur = hi === lastIdx;
+    return { t, name: DATA.tickers[t].name, wmax, wcur: cur ? w[lastIdx] : null, cur, lo, hi };
+  });
+  items.sort((a, b) => (b.cur - a.cur) || ((b.cur ? b.wcur : b.wmax) - (a.cur ? a.wcur : a.wmax)));
+  trajState.items = items;
+  const nCur = items.filter(x => x.cur).length;
+  const opt = x => `<option value="${escHtml(x.t)}">${escHtml(x.name)} — ${x.cur ? fmt(x.wcur, 2) + '%' : '최고 ' + fmt(x.wmax, 2) + '%'}</option>`;
+  const curOpts = items.filter(x => x.cur).map(opt).join('');
+  const pastOpts = items.filter(x => !x.cur).map(opt).join('');
+  sel.innerHTML =
+    (curOpts ? `<optgroup label="현재 보유 (${nCur})">${curOpts}</optgroup>` : '') +
+    (pastOpts ? `<optgroup label="과거 보유·청산 (${items.length - nCur})">${pastOpts}</optgroup>` : '');
+  renderTrajStock(items[0].t);
+}
+
+function renderTrajStock(t) {
+  const T = trajForCurrentEtf();
+  if (!T || !T.px[t]) return;
+  $('trajSelect').value = t;
+  trajState.cur = trajState.items.findIndex(x => x.t === t);
+  const item = trajState.items[trajState.cur];
+  const px = T.px[t], ccy = T.ccy[t] || '', sym = CCY_SYM[ccy] || '';
+  const A = getActiveDaily(DATA)[t];
+  const w = DATA.series[t].weight;
+  const lo = item.lo, hi = item.hi, EPS = 0.02;
+  const dates = [], price = [], weight = [], buy = [], sell = [], avg = [], pnl = [];
+  let cw = 0, cwp = 0, nb = 0, ns = 0, hiPx = 0, entryPx = null, nowPx = null, lastAvg = null;
+  for (let i = lo; i <= hi; i++) {
+    const p = px[i] != null ? px[i] : null;
+    dates.push(DATA.dates[i]); price.push(p); weight.push(w[i]);
+    const a = A ? A[i] : null;
+    const b = (a != null && a > EPS) ? a : null;
+    const s = (a != null && a < -EPS) ? -a : null;
+    buy.push(b); sell.push(s);
+    if (b != null && p != null) { cw += b; cwp += b * p; nb++; }
+    if (s != null) ns++;
+    const ac = cw > 0 ? cwp / cw : null;
+    avg.push(ac); lastAvg = ac != null ? ac : lastAvg;
+    pnl.push((p != null && ac) ? +(((p / ac) - 1) * 100).toFixed(1) : null);
+    if (p != null) { if (entryPx == null) entryPx = p; nowPx = p; if (p > hiPx) hiPx = p; }
+  }
+  const buyPx = buy.map((b, k) => b != null ? price[k] : null);
+  const sellPx = sell.map((s, k) => s != null ? price[k] : null);
+  const buySize = buy.map(b => b != null ? 7 + Math.min(b, 6) * 4 : 0);
+  const sellSize = sell.map(s => s != null ? 7 + Math.min(s, 6) * 4 : 0);
+  const mult = (entryPx && hiPx) ? hiPx / entryPx : null;
+  const gain = (lastAvg && nowPx) ? (nowPx / lastAvg - 1) * 100 : null;
+  const gtxt = gain == null ? '' : `<span class="${gain >= 0 ? 'gain' : 'loss'}">${fmtPct(gain, 1)}</span>`;
+  const badge = item.cur ? `<span class="badge cur">현재 보유</span>` : `<span class="badge past">과거 청산</span>`;
+  $('trajStat').innerHTML =
+    `<span>${escHtml(item.name)} ${badge}</span>` +
+    `<span>진입 <b>${sym}${fmt(entryPx, 2)}</b> · ${fmt(weight[0], 2)}%</span>` +
+    `<span>추정 평균단가 <b>${sym}${fmt(lastAvg, 2)}</b></span>` +
+    `<span>${item.cur ? '현재' : '최종'} <b>${sym}${fmt(nowPx, 2)}</b> ${gtxt}</span>` +
+    `<span>최고 <b>${sym}${fmt(hiPx, 2)}</b>${mult ? ` (${fmt(mult, 1)}배)` : ''}</span>` +
+    `<span>최고비중 <b>${fmt(item.wmax, 2)}%</b></span>` +
+    `<span>능동 매수 <b>${nb}</b> · 매도 <b>${ns}</b> · ${dates.length}거래일</span>`;
+
+  const validPx = price.filter(p => p != null);
+  const logok = validPx.length > 0 && validPx.every(p => p > 0);
+  Plotly.newPlot('trajChart1', [
+    { x: dates, y: price, name: `주가 (${ccy})`, type: 'scatter', mode: 'lines', line: { color: '#444', width: 1.5 }, connectgaps: true, yaxis: 'y', hovertemplate: `주가 ${sym}%{y:,.2f}<extra></extra>` },
+    { x: dates, y: avg, name: '추정 평균단가', type: 'scatter', mode: 'lines', line: { color: '#f5b301', width: 1.8, dash: 'dash' }, connectgaps: true, yaxis: 'y', hovertemplate: `평균단가 ${sym}%{y:,.2f}<extra></extra>` },
+    { x: dates, y: pnl, name: '평가손익률', type: 'scatter', mode: 'lines', line: { color: '#9b59b6', width: 1.4 }, connectgaps: true, yaxis: 'y2', hovertemplate: '손익률 %{y:+.1f}%<extra></extra>' },
+    { x: dates, y: buyPx, name: '능동 매수', type: 'scatter', mode: 'markers', yaxis: 'y', marker: { color: 'rgba(34,197,94,.55)', line: { color: '#16a34a', width: 1 }, size: buySize }, customdata: buy, hovertemplate: '능동 매수 +%{customdata:.2f}%p<extra></extra>' },
+    { x: dates, y: sellPx, name: '능동 매도', type: 'scatter', mode: 'markers', yaxis: 'y', marker: { color: 'rgba(239,68,68,.5)', line: { color: '#dc2626', width: 1 }, size: sellSize }, customdata: sell, hovertemplate: '능동 매도 -%{customdata:.2f}%p<extra></extra>' },
+  ], {
+    title: { text: '주가 · 추정 평균단가 · 평가손익률 + 능동 매수/매도 (점이 클수록 큰 매매)', font: { size: 13 } },
+    height: 430, margin: { l: 66, r: 60, t: 36, b: 56 },
+    yaxis: { title: `주가 ${sym}${logok ? ' (로그)' : ''}`, type: logok ? 'log' : 'linear' },
+    yaxis2: { title: '평가손익률 %', overlaying: 'y', side: 'right', showgrid: false, zeroline: false },
+    legend: { orientation: 'h', y: -0.18, font: { size: 11 } },
+    hovermode: 'x unified',
+  }, { responsive: true, displayModeBar: false });
+
+  Plotly.newPlot('trajChart2', [
+    { x: dates, y: weight, name: '펀드 내 비중', type: 'scatter', mode: 'lines', fill: 'tozeroy', line: { color: '#3b82f6', width: 2 }, fillcolor: 'rgba(59,130,246,.12)', connectgaps: false, yaxis: 'y', hovertemplate: '비중 %{y:.2f}%<extra></extra>' },
+    { x: dates, y: buy, name: '능동 매수', type: 'bar', marker: { color: '#22c55e' }, yaxis: 'y2', hovertemplate: '능동 매수 +%{y:.2f}%p<extra></extra>' },
+    { x: dates, y: sell.map(s => s != null ? -s : null), name: '능동 매도', type: 'bar', marker: { color: '#ef4444' }, yaxis: 'y2', hovertemplate: '능동 매도 %{y:.2f}%p<extra></extra>' },
+  ], {
+    title: { text: '펀드 내 비중 변화 + 능동 매매 (%p)', font: { size: 13 } },
+    height: 320, margin: { l: 56, r: 60, t: 36, b: 56 },
+    yaxis: { title: '비중 %', rangemode: 'tozero' },
+    yaxis2: { title: '능동 %p', overlaying: 'y', side: 'right', showgrid: false, zeroline: true },
+    legend: { orientation: 'h', y: -0.2, font: { size: 11 } },
+    hovermode: 'x unified', barmode: 'relative',
+  }, { responsive: true, displayModeBar: false });
 }
 
 // ===== ⑦ Heatmap =====
