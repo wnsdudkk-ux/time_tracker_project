@@ -288,13 +288,7 @@ details ul { margin: 8px 0; padding-left: 24px; max-height: 220px; overflow-y: a
   </section>
 
   <section>
-    <h2>⑧ 지역별 비중 추이</h2>
-    <p class="desc">종목코드 접미사로 자동 분류 (US/KR/HK/JP/CN/Fund/Cash/Other).</p>
-    <div id="regionChart"></div>
-  </section>
-
-  <section>
-    <h2>⑪ 종목별 매매 궤적 <span class="muted" style="font-size:12px;font-weight:400;">(현재 보유 + 과거 청산 전 종목)</span></h2>
+    <h2>⑧ 종목별 매매 궤적 <span class="muted" style="font-size:12px;font-weight:400;">(현재 보유 + 과거 청산 전 종목)</span></h2>
     <p class="desc">
       현지통화 <b>수정주가</b>(yfinance)에 매니저의 <b>능동 매수·매도</b>를 겹쳐 봅니다.
       능동 %p = 비중변화에서 <b>가격효과·펀드 자금유출입(패시브 스케일링)을 제거</b>한 순수 매니저 액션.
@@ -845,7 +839,6 @@ function renderAll() {
   renderEntriesExits();
   renderHoldingsTable();
   renderHeatmap();
-  renderRegion();
   renderDataQuality();
   renderDrilldown(null);
 }
@@ -1682,37 +1675,6 @@ function renderHeatmap() {
     margin: { l: 220, r: 80, t: 10, b: 40 },
     yaxis: { autorange: 'reversed', tickfont: { size: 10 } },
     xaxis: { tickfont: { size: 10 } },
-  }, { responsive: true });
-}
-
-// ===== ⑧ Region =====
-function renderRegion() {
-  const i1 = state.i1, i2 = state.i2;
-  const dates = activeDates();
-  const n = dates.length;
-  const regions = {};
-  for (const t in DATA.tickers) {
-    const r = DATA.tickers[t].region;
-    if (!regions[r]) regions[r] = new Array(n).fill(0);
-    const arr = DATA.series[t].weight;
-    for (let k = 0; k < n; k++) {
-      const w = arr[i1 + k];
-      if (w != null) regions[r][k] += w;
-    }
-  }
-  const order = ['US', 'KR', 'HK', 'JP', 'CN', 'Fund', 'Other', 'Cash'];
-  const present = order.filter(r => regions[r] && regions[r].some(x => x > 0));
-  const traces = present.map(r => ({
-    x: dates, y: regions[r], name: r,
-    type: 'scatter', mode: 'lines', stackgroup: 'one',
-    line: { width: 0.5 }, fillcolor: REGION_COLORS[r] || '#999',
-  }));
-  Plotly.newPlot('regionChart', traces, {
-    height: 380,
-    margin: { l: 50, r: 20, t: 10, b: 40 },
-    yaxis: { title: '비중 합 (%)', range: [0, 105] },
-    legend: { orientation: 'h', y: -0.15 },
-    hovermode: 'x unified',
   }, { responsive: true });
 }
 
