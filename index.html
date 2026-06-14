@@ -1667,7 +1667,7 @@ function renderHeatmap() {
   const z = sorted.map(x => DATA.series[x.t].weight.slice(i1, i2 + 1));
   Plotly.newPlot('heatmapChart', [{
     z, x: dates, y: yLabels,
-    type: 'heatmap', colorscale: 'YlOrRd', hoverongaps: false,
+    type: 'heatmap', colorscale: 'YlOrRd', reversescale: true, hoverongaps: false,
     colorbar: { title: '비중 %' },
     hovertemplate: '%{y}<br>%{x}: %{z:.2f}%<extra></extra>',
   }], {
