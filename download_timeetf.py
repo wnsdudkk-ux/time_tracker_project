@@ -1,42 +1,39 @@
 """
 timeetf.co.kr 다중 ETF 구성종목 일괄 다운로드.
-- 각 ETF는 data/<key>/ 하위 폴더에 저장 (구성종목_YYYY-MM-DD.xlsx)
-- 각 ETF의 상장일(최초 실데이터일)부터 오늘까지, 평일(월~금)만
+- 각 ETF는 data/<key>/ 하위 폴더에 저장
+- 평일(월~금)만, 각 ETF의 상장일부터 (listed — timeetf.co.kr m11_view.php 공시 기준)
 - 표준 라이브러리만 사용 (별도 설치 불필요)
-
-서버는 상장 전·휴장일에도 status 200 + xlsx를 돌려주지만,
-그 파일은 헤더 1행짜리 '빈 껍데기'(약 6,460B)다. 시트의 데이터 행 수로
-실데이터 여부를 판별해 빈 파일은 저장하지 않는다.
+- 일시 오류(네트워크/5xx)는 점증 대기 재시도, 저장 전 xlsx(zip) 무결성 검증
+- 최근 REFRESH_DAYS 일은 파일이 있어도 재다운로드해 정정 공시 반영
+  (내용이 같으면 파일을 건드리지 않아 build_data.py 파싱 캐시가 유지됨)
 """
 
 import io
 import os
-import re
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
 from datetime import date, timedelta
 
-# start = 상장일(최초 실데이터일). 서버 질의로 확인한 값.
 ETFS = [
-    {"idx": 6,  "key": "ai_active",        "name": "TIME 글로벌AI인공지능액티브", "start": "2023-05-15"},
-    {"idx": 11, "key": "kospi_active",     "name": "TIME 코스피액티브",          "start": "2021-05-24"},
-    {"idx": 2,  "key": "nasdaq100_active", "name": "TIME 미국나스닥100액티브",   "start": "2022-05-09"},
-    {"idx": 5,  "key": "sp500_active",     "name": "TIME 미국S&P500액티브",      "start": "2022-05-09"},
+    {"idx": 6,  "key": "ai_active",        "name": "TIME 글로벌AI인공지능액티브", "listed": date(2023, 5, 16)},
+    {"idx": 11, "key": "kospi_active",     "name": "TIME 코스피액티브",           "listed": date(2021, 5, 25)},
+    {"idx": 2,  "key": "nasdaq100_active", "name": "TIME 미국나스닥100액티브",    "listed": date(2022, 5, 11)},
+    {"idx": 5,  "key": "sp500_active",     "name": "TIME 미국S&P500액티브",       "listed": date(2022, 5, 11)},
 ]
 
-HERE          = os.path.dirname(os.path.abspath(__file__))
-ROOT          = os.path.join(HERE, "data")
-BASE_URL      = "https://timeetf.co.kr/pdf_excel.php"
-END_DATE      = date.today()
-SLEEP_SEC     = 0.5
-TIMEOUT       = 30
-RETRIES       = 3       # 전송 오류/예상치 못한 응답 시 재시도 횟수
-REAL_MIN_SIZE = 7000    # 이 크기 이상이면 실데이터로 신뢰 (빈 껍데기는 ~6,460B)
-
-_ROW_RE = re.compile(rb"<row ")
+HERE         = os.path.dirname(os.path.abspath(__file__))
+ROOT         = os.path.join(HERE, "data")
+BASE_URL     = "https://timeetf.co.kr/pdf_excel.php"
+END_DATE     = date.today()
+SLEEP_SEC    = 0.5
+TIMEOUT      = 30
+RETRIES      = 3        # 총 시도 횟수 (일시 오류만 재시도)
+RETRY_WAIT   = 1.5      # 첫 재시도 대기(초), 이후 ×2 점증
+REFRESH_DAYS = 7        # 최근 N일(달력일)은 기존 파일이 있어도 재다운로드 (정정 공시)
 
 
 def weekdays(start: date, end: date):
@@ -47,14 +44,30 @@ def weekdays(start: date, end: date):
         d += timedelta(days=1)
 
 
-def is_real_xlsx(data: bytes) -> bool:
-    """sheet1 에 헤더 외 데이터 행이 1개 이상 있으면 실데이터로 본다."""
+def valid_xlsx(data: bytes) -> bool:
+    """저장 전 무결성 검증: zip 컨테이너가 온전하고 워크북이 들어있는지 (stdlib만 사용)."""
+    if len(data) < 100 or not data.startswith(b"PK"):
+        return False
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as z:
-            xml = z.read("xl/worksheets/sheet1.xml")
-    except Exception:
+            if z.testzip() is not None:
+                return False
+            names = z.namelist()
+            return "[Content_Types].xml" in names and any(n.startswith("xl/") for n in names)
+    except (zipfile.BadZipFile, OSError):
         return False
-    return len(_ROW_RE.findall(xml)) >= 2
+
+
+def xlsx_fingerprint(data: bytes):
+    """데이터 영역(xl/**)의 (이름, CRC) 지문. 서버가 매 요청마다 xlsx 를 재생성해
+    docProps 의 생성 시각 등 메타데이터가 달라지므로, raw 바이트 비교 대신
+    실제 시트 데이터가 같은지로 '정정 공시' 여부를 판별한다."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            return sorted((i.filename, i.CRC) for i in z.infolist()
+                          if i.filename.startswith("xl/"))
+    except (zipfile.BadZipFile, OSError):
+        return None
 
 
 def fetch(idx: int, date_str: str) -> tuple[bytes, str, int]:
@@ -67,93 +80,105 @@ def fetch(idx: int, date_str: str) -> tuple[bytes, str, int]:
         return r.read(), r.headers.get("Content-Type", ""), r.status
 
 
-def fetch_xlsx(idx: int, date_str: str) -> bytes:
-    """xlsx 본문을 재시도와 함께 받는다. 끝내 실패하면 예외."""
-    last = ""
-    for attempt in range(1, RETRIES + 1):
+def fetch_retry(idx: int, date_str: str):
+    """일시 오류(네트워크 단절·타임아웃·5xx)만 재시도. 4xx·정상 응답은 즉시 반환.
+    반환: (result | None, last_error | None)"""
+    wait = RETRY_WAIT
+    last_err = None
+    for attempt in range(RETRIES):
         try:
-            data, ctype, status = fetch(idx, date_str)
-            if status == 200 and "spreadsheetml" in ctype and data:
-                return data
-            last = f"status={status} type={ctype} size={len(data)}"
-        except Exception as e:  # noqa: BLE001 - 네트워크 예외 전부 재시도 대상
-            last = repr(e)
-        if attempt < RETRIES:
-            time.sleep(SLEEP_SEC * attempt * 2)
-    raise RuntimeError(last)
+            return fetch(idx, date_str), None
+        except urllib.error.HTTPError as e:
+            if e.code < 500:
+                return None, e          # 4xx → 재시도 무의미
+            last_err = e
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            last_err = e
+        if attempt < RETRIES - 1:
+            time.sleep(wait)
+            wait *= 2
+    return None, last_err
 
 
-def existing_is_real(path: str) -> bool:
-    """이미 받아둔 파일이 실데이터인지. 큰 파일은 크기로 신뢰, 작은 파일만 열어 확인."""
-    sz = os.path.getsize(path)
-    if sz >= REAL_MIN_SIZE:
-        return True
-    if sz == 0:
-        return False
-    with open(path, "rb") as f:
-        return is_real_xlsx(f.read())
+def save_atomic(path: str, data: bytes) -> None:
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.replace(tmp, path)
 
 
 def run_one(etf: dict) -> tuple[int, int, int, list[str]]:
     out_dir = os.path.join(ROOT, etf["key"])
     os.makedirs(out_dir, exist_ok=True)
-    start = date.fromisoformat(etf["start"])
-    targets = list(weekdays(start, END_DATE))
-    print(f"\n=== [idx={etf['idx']:>2}] {etf['name']} "
-          f"({etf['start']} ~ {END_DATE}, {len(targets)} weekdays) ===", flush=True)
-
-    saved = skipped = no_data = removed = 0
+    targets = list(weekdays(etf["listed"], END_DATE))
+    print(f"\n=== [idx={etf['idx']:>2}] {etf['name']} (상장 {etf['listed']} ~, {len(targets)} weekdays) ===", flush=True)
+    saved = updated = skipped = 0
     failed: list[str] = []
     for d in targets:
         ds = d.strftime("%Y-%m-%d")
         out = os.path.join(out_dir, f"구성종목_{ds}.xlsx")
+        exists = os.path.exists(out) and os.path.getsize(out) > 0
+        recent = (END_DATE - d).days < REFRESH_DAYS
+        if exists and not recent:
+            skipped += 1
+            continue
 
-        if os.path.exists(out):
-            if existing_is_real(out):
-                skipped += 1
-                continue
-            # 빈 껍데기(과거 휴장일 등)가 저장돼 있으면 제거 후 다시 판단
-            os.remove(out)
-            removed += 1
-
-        try:
-            data = fetch_xlsx(etf["idx"], ds)
-        except Exception as e:  # noqa: BLE001
-            failed.append(ds)
-            print(f"  [err]  {ds}: {e}", flush=True)
+        res, err = fetch_retry(etf["idx"], ds)
+        if res is None:
+            if exists:
+                print(f"  [keep] {ds}: 재확인 실패({err}) → 기존 파일 유지", flush=True)
+            else:
+                failed.append(ds)
+                print(f"  [err]  {ds}: {err}", flush=True)
             time.sleep(SLEEP_SEC)
             continue
 
-        if is_real_xlsx(data):
-            with open(out, "wb") as f:
-                f.write(data)
+        data, ctype, status = res
+        ok = status == 200 and "spreadsheetml" in ctype and valid_xlsx(data)
+        if not ok:
+            if exists:
+                print(f"  [keep] {ds}: 응답 이상(status={status}, type={ctype}, "
+                      f"size={len(data)}) → 기존 파일 유지", flush=True)
+            else:
+                failed.append(ds)
+                print(f"  [fail] {ds}: status={status} type={ctype} size={len(data)}"
+                      f"{' (zip 무결성 불합격)' if status == 200 and 'spreadsheetml' in ctype else ''}",
+                      flush=True)
+            time.sleep(SLEEP_SEC)
+            continue
+
+        if exists:
+            with open(out, "rb") as f:
+                old = f.read()
+            if old == data or xlsx_fingerprint(old) == xlsx_fingerprint(data):
+                skipped += 1                      # 시트 데이터 동일 → mtime 보존(파싱 캐시 유지)
+            else:
+                save_atomic(out, data)
+                updated += 1
+                print(f"  [upd]  {ds}: 정정 공시 반영 {len(old):,}B → {len(data):,}B", flush=True)
+        else:
+            save_atomic(out, data)
             saved += 1
             print(f"  [ok]   {ds}: {len(data):,}B", flush=True)
-        else:
-            # 휴장일 등 데이터 없는 날 — 정상이므로 실패가 아님
-            no_data += 1
         time.sleep(SLEEP_SEC)
-
-    print(f"  -> saved {saved} | skipped {skipped} | no-data {no_data} "
-          f"| removed-empty {removed} | failed {len(failed)}", flush=True)
-    return saved, skipped, no_data, failed
+    print(f"  -> saved {saved} | updated {updated} | skipped {skipped} | failed {len(failed)}", flush=True)
+    return saved, updated, skipped, failed
 
 
 def main() -> int:
-    grand_saved = grand_skipped = grand_no_data = 0
+    grand_saved = grand_updated = grand_skipped = 0
     grand_failed: list[tuple[int, str]] = []
     for etf in ETFS:
-        s, k, nd, fails = run_one(etf)
+        s, u, k, fails = run_one(etf)
         grand_saved += s
+        grand_updated += u
         grand_skipped += k
-        grand_no_data += nd
         grand_failed.extend((etf["idx"], d) for d in fails)
-
     print()
-    print(f"[TOTAL] saved {grand_saved} | skipped {grand_skipped} "
-          f"| no-data {grand_no_data} | failed {len(grand_failed)}")
+    print(f"[TOTAL] saved {grand_saved} | updated {grand_updated} | "
+          f"skipped {grand_skipped} | failed {len(grand_failed)}")
     if grand_failed:
-        print("Failed (네트워크 오류 등 — 재실행 시 자동 재시도):")
+        print("Failed (휴장/데이터 없음 가능):")
         for idx, ds in grand_failed[:20]:
             print(f"  - idx={idx}  {ds}")
         if len(grand_failed) > 20:

@@ -21,14 +21,15 @@ Thumbs.db
 # ─── Logs (필요 시 주석 처리해서 커밋) ───────────────────
 # download.log
 
+# ─── 가격 파이프라인 중간 산출물 (trajectory.js 만 커밋) ──
+prices.json
+price_cache/
+
+# ─── 빌드 캐시 / 정크 ────────────────────────────────────
+.parse_cache.json
+*.zip
+
 # ─── 임시 ────────────────────────────────────────────────
 *.tmp
 *.bak
 *~
-_ref_logic.txt
-data/*.zip
-
-# ─── 가격 캐시 (yfinance, 재생성 가능) ───────────────────
-price_cache/
-prices.json
-fetch_prices.log
