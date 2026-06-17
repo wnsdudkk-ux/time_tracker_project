@@ -67,8 +67,6 @@ ETFS = [
 HERE      = os.path.dirname(os.path.abspath(__file__))
 ROOT      = os.path.join(HERE, "data")
 OUT_JS    = os.path.join(HERE, "data.js")
-KEYS_TXT  = os.path.join(HERE, "api_keys.txt")
-KEYS_JS   = os.path.join(HERE, "keys.js")
 
 DATE_RE   = re.compile(r"(\d{4}-\d{2}-\d{2})")
 CACHE_VER = 2          # 파싱/정규화 로직이 바뀌면 +1 → 캐시 전체 무효화
@@ -443,31 +441,8 @@ def finalize_missing(etfs):
 
 
 # ──────────────────────────────────────────────
-# 5. keys.js / main
+# 5. main
 # ──────────────────────────────────────────────
-
-def write_keys_js() -> None:
-    """api_keys.txt → keys.js (window.API_KEYS = {...}). 파일 없으면 skip."""
-    if not os.path.exists(KEYS_TXT):
-        if os.path.exists(KEYS_JS):
-            os.remove(KEYS_JS)
-        print(f"[!] {KEYS_TXT} 없음 → keys.js 미생성 (LLM 보고서 비활성)")
-        return
-    keys: dict[str, str] = {}
-    with open(KEYS_TXT, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" in line:
-                k, v = line.split("=", 1)
-                keys[k.strip()] = v.strip()
-    with open(KEYS_JS, "w", encoding="utf-8") as f:
-        f.write("window.API_KEYS = ")
-        json.dump(keys, f, ensure_ascii=False)
-        f.write(";\n")
-    print(f"[OK] {KEYS_JS}  (키 {len(keys)}개)")
-
 
 def main() -> int:
     out = {
@@ -495,7 +470,6 @@ def main() -> int:
     print()
     print(f"[OK] {OUT_JS}  ({size_mb:.2f} MB)")
     print(f"     휴장 추정 제외일: {len(out['inferred_holidays'])}일")
-    write_keys_js()
     for e in out["etfs"]:
         m = e["meta"]
         n_act = sum(len(s.get("act", [])) for s in e["series"].values())

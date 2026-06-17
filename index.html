@@ -7,7 +7,6 @@
 <script src="data.js"></script>
 <script src="themes.js"></script>
 <script src="trajectory.js"></script>
-<script src="keys.js"></script>
 <style>
 * { box-sizing: border-box; }
 body {
@@ -125,32 +124,6 @@ details ul { margin: 8px 0; padding-left: 24px; max-height: 220px; overflow-y: a
   background: #e67e22; border-color: #e67e22; color: white;
 }
 
-.report-section {
-  background: linear-gradient(180deg, #f5f7ff 0%, #ffffff 100%);
-  border: 1px solid #c7d4f0;
-}
-.report-section h2 {
-  color: #2a6df4; display: flex; align-items: center; gap: 8px;
-}
-.report-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
-.btn-llm {
-  padding: 8px 18px; background: #2a6df4; color: white;
-  border: none; border-radius: 4px; cursor: pointer;
-  font-size: 13px; font-weight: 600;
-}
-.btn-llm:hover { background: #1d54c9; }
-.btn-llm:disabled { background: #aaa; cursor: not-allowed; }
-
-.report-content { font-size: 14px; line-height: 1.65; color: #222; }
-.report-content h2 { font-size: 17px; margin: 18px 0 8px; color: #2a6df4; border: none; padding: 0; }
-.report-content h3 { font-size: 15px; margin: 14px 0 6px; color: #333; }
-.report-content h4 { font-size: 14px; margin: 10px 0 4px; color: #555; font-weight: 600; }
-.report-content p { margin: 6px 0; }
-.report-content ul { margin: 4px 0 8px; padding-left: 22px; }
-.report-content li { margin: 2px 0; }
-.report-content strong { color: #1a1a1a; }
-.report-content code { background: #eef0f4; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
-
 .cross-kpi-table table { font-size: 12px; }
 .cross-kpi-table th, .cross-kpi-table td { padding: 6px 8px; }
 
@@ -168,6 +141,7 @@ details ul { margin: 8px 0; padding-left: 24px; max-height: 220px; overflow-y: a
 }
 #exitsContainer tr.exit-row:hover { background: #eef3ff; }
 #entriesContainer tr.hover-traj:hover { background: #eef3ff; }
+#holdingsTable tbody tr.hover-traj:hover { background: #eef3ff; }
 
 /* ⑧ 매매 궤적 */
 .traj-controls { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
@@ -180,6 +154,24 @@ details ul { margin: 8px 0; padding-left: 24px; max-height: 220px; overflow-y: a
   border-radius: 4px; cursor: pointer; font-size: 13px;
 }
 .traj-controls button:hover { background: #eef3ff; border-color: #2a6df4; color: #2a6df4; }
+.traj-divider {
+  height: 12px; margin: 1px 0; cursor: row-resize;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; touch-action: none;
+}
+.traj-divider::before {
+  content: ''; width: 52px; height: 4px; border-radius: 2px;
+  background: #c7ccd4; transition: background .12s, width .12s;
+}
+.traj-divider:hover::before { background: #2a6df4; width: 80px; }
+.traj-divider.dragging::before { background: #1d54c9; width: 80px; }
+#trajMaxBtn { white-space: nowrap; }
+section#trajSection.traj-maximized {
+  position: fixed; inset: 0; z-index: 9000; margin: 0;
+  max-width: none; border-radius: 0; box-shadow: none;
+  overflow-y: scroll; overflow-x: hidden;   /* 스크롤바 공간 항상 예약 → 두 차트 동일 폭 */
+}
+section#trajSection.traj-maximized .desc { display: none; }
 .traj-stat {
   display: flex; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 10px;
   font-size: 13px; color: #444;
@@ -215,16 +207,6 @@ details ul { margin: 8px 0; padding-left: 24px; max-height: 220px; overflow-y: a
 
 <main>
 <div id="singleEtfView">
-  <section class="report-section">
-    <h2>🤖 AI 종합 분석 보고서 <span class="muted" style="font-size:12px;font-weight:400;">(Gemini Flash)</span></h2>
-    <p class="desc">현재 ETF의 선택 기간 데이터(KPI / Top movers / 신규 편입·퇴출 / 지역 분포)를 바탕으로 매니저 전략·포지션 변화를 종합 분석합니다.</p>
-    <div class="report-actions">
-      <button id="btnEtfReport" class="btn-llm">📊 보고서 생성</button>
-      <span id="etfReportStatus" class="muted"></span>
-    </div>
-    <div id="etfReportContent" class="report-content"></div>
-  </section>
-
   <section>
     <h2>포트폴리오 KPI</h2>
     <p class="desc">선택 기간 양 끝점 기준 요약 + 시계열.</p>
@@ -315,28 +297,31 @@ details ul { margin: 8px 0; padding-left: 24px; max-height: 220px; overflow-y: a
   </section>
 
   <section>
-    <h2>⑦ 보유 종목 표 (행 클릭 → 종목별 시계열)</h2>
-    <p class="desc">종료일 기준 보유 종목. 행 클릭 시 해당 종목 비중·수량·평가금액 시계열 + 일별 능동 매매(추정 체결단가 포함) 표시.<br>
+    <h2>⑦ 보유 종목 표 (행 호버 → 수익률 차트 · 클릭 → 종목별 시계열)</h2>
+    <p class="desc">종료일 기준 보유 종목. <b>행에 커서를 올리면 편입 이후 현재까지 주가·추정 수익률 차트</b>가 뜨고, 행을 클릭하면 비중·수량·평가금액 시계열 + 일별 능동 매매(추정 체결단가 포함)가 표시됩니다.<br>
     편입 후 추정 수익률 = 현재 보유 사이클(마지막 편입일 이후)의 능동 매수 가중 평균단가 대비 현재 내재가(원화 환산·분할 조정). <b>*</b> = 데이터 시작 전부터 보유 → 데이터 시작일 이후 기준.</p>
     <div class="scroll-tbl"><table id="holdingsTable"></table></div>
     <div id="drilldownChart" style="margin-top:12px;"></div>
     <div id="drilldownActChart"></div>
   </section>
 
-  <section>
+  <section id="trajSection">
     <h2>⑧ 종목별 매매 궤적 <span class="muted" style="font-size:12px;font-weight:400;">(현재 보유 + 과거 청산 전 종목)</span></h2>
     <p class="desc">
       현지통화 <b>수정주가</b>(yfinance)에 매니저의 <b>능동 매수·매도</b>를 겹쳐 봅니다.
       능동 %p = 비중변화에서 <b>가격효과·펀드 자금유출입(패시브 스케일링)을 제거</b>한 순수 매니저 액션.
-      평균단가는 능동 매수가 일어난 가격의 가중평균(추정). 점이 클수록 큰 능동 매매.
+      평균단가는 능동 매수가 일어난 가격의 가중평균(추정). 점이 클수록 큰 능동 매매.<br>
+      <b>아래 차트 하단의 기간 슬라이더</b> 양쪽 막대를 끌면 그 구간만 확대됩니다(위·아래 두 차트 동기화 · 차트 더블클릭 시 전체 복원).
     </p>
     <div class="traj-controls">
       <button id="trajPrev" title="이전 종목">◀</button>
       <select id="trajSelect"></select>
       <button id="trajNext" title="다음 종목">▶</button>
+      <button id="trajMaxBtn" title="차트 최대화 (Esc 닫기)">⛶ 최대화</button>
     </div>
     <div id="trajStat" class="traj-stat"></div>
     <div id="trajChart1"></div>
+    <div id="trajDivider" class="traj-divider" title="드래그하여 위/아래 패널 높이 비율 조절"></div>
     <div id="trajChart2"></div>
     <div id="trajEmpty" class="muted" style="display:none;">가격 데이터가 연계된 종목이 없습니다. <code>fetch_prices.py</code> → <code>build_trajectory.py</code> 실행 후 새로고침하세요.</div>
   </section>
@@ -370,16 +355,6 @@ details ul { margin: 8px 0; padding-left: 24px; max-height: 220px; overflow-y: a
 </div><!-- /singleEtfView -->
 
 <div id="crossEtfView" style="display:none;">
-  <section class="report-section">
-    <h2>🌐 전체 펀드 통합 증감 분석 보고서 <span class="muted" style="font-size:12px;font-weight:400;">(Gemini Flash)</span></h2>
-    <p class="desc">4개 ETF의 선택 기간 데이터를 통합 비교 분석. 공통 보유종목·테마, 펀드별 차별화된 포지셔닝, 시장 흐름의 시사점을 종합합니다.</p>
-    <div class="report-actions">
-      <button id="btnCrossReport" class="btn-llm">📊 통합 보고서 생성</button>
-      <span id="crossReportStatus" class="muted"></span>
-    </div>
-    <div id="crossReportContent" class="report-content"></div>
-  </section>
-
   <section>
     <h2>펀드별 KPI 요약 (선택 기간)</h2>
     <p class="desc">상단 날짜 범위에 맞춰 4개 펀드의 핵심 지표를 동시에 비교.</p>
@@ -490,9 +465,6 @@ function switchEtf(i) {
   $('crossEtfView').style.display = 'none';
   $('etfTitle').textContent = DATA.name;
   weightOverlay.activeTicker = null;
-  // ETF 전환 시 이전 보고서 컨텐츠 초기화 (혼동 방지)
-  $('etfReportContent').innerHTML = '';
-  $('etfReportStatus').textContent = '';
   setupDates();
   apply();
   buildTrajectorySection(); // 매매궤적 패널: 펀드 전환 시 재구성(선택 기간 무관·전체 기간)
@@ -523,11 +495,6 @@ function setupDates() {
   $('metaInfo').textContent = `${DATA.meta.first_date} ~ ${DATA.meta.last_date} (${DATA.meta.n_dates}일, ${DATA.meta.n_tickers}종목 누적)`;
 }
 
-// ============================================================
-//  LLM (Gemini Flash) — per-ETF & cross-ETF report
-// ============================================================
-const GEMINI_MODEL = 'gemini-3-flash-preview';
-
 function dateToIdxIn(dates, target) {
   if (!target || target <= dates[0]) return 0;
   if (target >= dates[dates.length - 1]) return dates.length - 1;
@@ -537,57 +504,6 @@ function dateToIdxIn(dates, target) {
     if (dates[mid] <= target) lo = mid; else hi = mid - 1;
   }
   return lo;
-}
-
-function renderMarkdown(text) {
-  const lines = String(text).split('\n');
-  const out = [];
-  let inList = false;
-  const flushList = () => { if (inList) { out.push('</ul>'); inList = false; } };
-  for (let raw of lines) {
-    let line = escHtml(raw);
-    line = line.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
-    line = line.replace(/`([^`\n]+)`/g, '<code>$1</code>');
-    if (/^### /.test(line))     { flushList(); out.push(`<h4>${line.slice(4)}</h4>`); }
-    else if (/^## /.test(line)) { flushList(); out.push(`<h3>${line.slice(3)}</h3>`); }
-    else if (/^# /.test(line))  { flushList(); out.push(`<h2>${line.slice(2)}</h2>`); }
-    else if (/^[-*] /.test(line)) {
-      if (!inList) { out.push('<ul>'); inList = true; }
-      out.push(`<li>${line.replace(/^[-*] /, '')}</li>`);
-    } else if (/^\d+\.\s+/.test(line)) {
-      if (!inList) { out.push('<ul>'); inList = true; }
-      out.push(`<li>${line.replace(/^\d+\.\s+/, '')}</li>`);
-    } else if (line.trim() === '') {
-      flushList();
-      out.push('');
-    } else {
-      flushList();
-      out.push(`<p>${line}</p>`);
-    }
-  }
-  flushList();
-  return out.join('\n');
-}
-
-async function callGemini(prompt) {
-  const apiKey = (window.API_KEYS && window.API_KEYS.GEMINI_API_KEY) || '';
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY 없음. api_keys.txt 확인 후 build.bat 재실행.');
-  }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data?.error?.message || `HTTP ${res.status}`);
-  }
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text || '(빈 응답)';
 }
 
 function etfAumAt(etf, idx) {
@@ -693,129 +609,6 @@ function buildEtfSnapshot(etf, i1, i2) {
     topHoldings, topUp, topDown,
     entries, exits, regDelta, themeDelta,
   };
-}
-
-function formatSnapshot(s, name) {
-  const krw = n => (n / 1e8).toFixed(1) + '억';
-  let t = `# ${name}\n`;
-  t += `기간: ${s.startD} ~ ${s.endD}\n`;
-  t += `AUM: ${krw(s.aum1)} → ${krw(s.aum2)} (${s.aumPct >= 0 ? '+' : ''}${s.aumPct.toFixed(1)}%)\n`;
-  t += `보유 종목: ${s.holdingsCount} | 상위10 집중도 ${s.top10Conc.toFixed(1)}% | 현금 ${s.cashEnd.toFixed(1)}% | 회전율 ${s.turnover.toFixed(1)}%\n\n`;
-  t += `## 종료일 상위 10 종목\n`;
-  for (const h of s.topHoldings) t += `- ${h.ticker} ${h.name} (${h.region}) ${h.weight.toFixed(2)}%\n`;
-  const mvLine = m => `- ${m.ticker} ${m.name}: 능동 ${m.act >= 0 ? '+' : ''}${m.act.toFixed(2)}%p (비중 ${m.w1.toFixed(2)}%→${m.w2.toFixed(2)}%, Net ${m.delta >= 0 ? '+' : ''}${m.delta.toFixed(2)}%p)\n`;
-  t += `\n## Top 5 능동 매수 (가격·환율 효과 제거한 운용역 순매수)\n`;
-  for (const m of s.topUp) t += mvLine(m);
-  t += `\n## Top 5 능동 매도 (가격·환율 효과 제거한 운용역 순매도)\n`;
-  for (const m of s.topDown) t += mvLine(m);
-  t += `\n## 신규 편입 (${s.entries.length}건, 최근 8건)\n`;
-  for (const e of s.entries.slice(-8)) t += `- ${e.date} ${e.ticker} ${e.name} (편입 ${e.weight.toFixed(2)}%)\n`;
-  t += `\n## 신규 퇴출 (${s.exits.length}건, 최근 8건)\n`;
-  for (const e of s.exits.slice(-8)) t += `- ${e.date} ${e.ticker} ${e.name} (직전 ${e.weight.toFixed(2)}%)\n`;
-  t += `\n## 테마 비중 변화 (시작 → 종료, |Δ| ≥ 0.5만)\n`;
-  for (const th of Object.keys(s.themeDelta).sort((a, b) => Math.abs(s.themeDelta[b].d) - Math.abs(s.themeDelta[a].d))) {
-    const v = s.themeDelta[th];
-    if (Math.abs(v.d) < 0.5) continue;
-    t += `- ${th}: ${v.w1.toFixed(1)}% → ${v.w2.toFixed(1)}% (${v.d >= 0 ? '+' : ''}${v.d.toFixed(1)}%p)\n`;
-  }
-  t += `\n## 지역 비중 변화 (%p, |Δ| ≥ 0.5만)\n`;
-  for (const r of Object.keys(s.regDelta).sort((a, b) => Math.abs(s.regDelta[b]) - Math.abs(s.regDelta[a]))) {
-    const d = s.regDelta[r];
-    if (Math.abs(d) < 0.5) continue;
-    t += `- ${r}: ${d >= 0 ? '+' : ''}${d.toFixed(1)}%p\n`;
-  }
-  return t;
-}
-
-async function generateEtfReport() {
-  const btn = $('btnEtfReport');
-  const status = $('etfReportStatus');
-  const content = $('etfReportContent');
-  const i1 = state.i1, i2 = state.i2;
-  const snap = buildEtfSnapshot(DATA, i1, i2);
-  const text = formatSnapshot(snap, DATA.name);
-  const prompt = `당신은 한국 ETF의 운용 데이터를 분석하는 전문 애널리스트입니다.
-다음은 "${DATA.name}" 펀드의 선택 기간 운용 데이터입니다.
-
-${text}
-
-위 데이터를 바탕으로 다음 4개 섹션의 종합 분석 보고서를 한국어로 작성해 주세요. 마크다운 형식 사용.
-
-## 1. 운용 핵심 요약
-한 단락으로 펀드의 운용 방향성과 주요 변화를 정리.
-
-## 2. 주요 포지션 변화
-Top movers와 신규 편입/퇴출이 시사하는 매니저의 의도. 구체적 종목명 인용.
-
-## 3. 투자 테마 / 섹터·지역 변화
-종목 분포·지역 변화에서 드러나는 투자 테마와 로테이션.
-
-## 4. 주목할 만한 점 / 리스크
-포트폴리오 집중도, 회전율, AUM 변화의 특이사항. 잠재 리스크.`;
-
-  btn.disabled = true;
-  status.textContent = '⏳ Gemini Flash 호출 중... (5~15초)';
-  content.innerHTML = '';
-  try {
-    const t0 = Date.now();
-    const out = await callGemini(prompt);
-    const dt = ((Date.now() - t0) / 1000).toFixed(1);
-    content.innerHTML = renderMarkdown(out) +
-      `<p class="muted" style="margin-top:14px;">생성: ${new Date().toLocaleString('ko-KR')} · ${dt}s · 모델 ${GEMINI_MODEL}</p>`;
-    status.textContent = '';
-  } catch (e) {
-    status.innerHTML = `<span class="warn">에러: ${escHtml(e.message)}</span>`;
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function generateCrossReport() {
-  const btn = $('btnCrossReport');
-  const status = $('crossReportStatus');
-  const content = $('crossReportContent');
-  const sd = $('startDate').value, ed = $('endDate').value;
-  let combined = '';
-  for (const etf of ROOT.etfs) {
-    const i1 = dateToIdxIn(etf.dates, sd);
-    const i2 = dateToIdxIn(etf.dates, ed);
-    const snap = buildEtfSnapshot(etf, i1, i2);
-    combined += formatSnapshot(snap, etf.name) + '\n---\n';
-  }
-  const prompt = `당신은 한국 ETF 운용 데이터를 분석하는 전문 애널리스트입니다.
-다음은 4개 ETF의 같은 기간 운용 데이터입니다.
-
-${combined}
-
-위 데이터를 바탕으로 4개 펀드의 통합 비교 분석 보고서를 한국어 마크다운으로 작성해 주세요.
-
-## 1. 펀드별 핵심 변화 (한 줄씩)
-각 펀드의 가장 중요한 1~2가지 변화.
-
-## 2. 공통 보유 종목 / 공통 테마
-여러 펀드에서 동시에 비중이 늘거나 줄어든 종목, 공통 투자 테마.
-
-## 3. 펀드 간 차별화된 전략
-각 펀드의 특색 있는 매니저 액션.
-
-## 4. 종합 시사점 / 시장 관점
-4개 펀드 데이터에서 읽히는 시장 흐름·매니저 컨센서스 또는 분기점.`;
-
-  btn.disabled = true;
-  status.textContent = '⏳ 4개 펀드 통합 분석 중... (10~25초)';
-  content.innerHTML = '';
-  try {
-    const t0 = Date.now();
-    const out = await callGemini(prompt);
-    const dt = ((Date.now() - t0) / 1000).toFixed(1);
-    content.innerHTML = renderMarkdown(out) +
-      `<p class="muted" style="margin-top:14px;">생성: ${new Date().toLocaleString('ko-KR')} · ${dt}s · 모델 ${GEMINI_MODEL}</p>`;
-    status.textContent = '';
-  } catch (e) {
-    status.innerHTML = `<span class="warn">에러: ${escHtml(e.message)}</span>`;
-  } finally {
-    btn.disabled = false;
-  }
 }
 
 function renderCrossView() {
@@ -924,8 +717,6 @@ function init() {
   buildTabs();
   $('applyBtn').addEventListener('click', apply);
   $('exportCsvBtn').addEventListener('click', exportCsv);
-  $('btnEtfReport').addEventListener('click', generateEtfReport);
-  $('btnCrossReport').addEventListener('click', generateCrossReport);
   document.querySelectorAll('input[name="weightMode"]').forEach(r =>
     r.addEventListener('change', renderWeightChart));
   document.querySelectorAll('input[name="moverMode"]').forEach(r =>
@@ -933,6 +724,8 @@ function init() {
   $('trajSelect').addEventListener('change', () => renderTrajStock($('trajSelect').value));
   $('trajPrev').addEventListener('click', () => { const n = trajState.items.length; if (!n) return; trajState.cur = (trajState.cur - 1 + n) % n; renderTrajStock(trajState.items[trajState.cur].t); });
   $('trajNext').addEventListener('click', () => { const n = trajState.items.length; if (!n) return; trajState.cur = (trajState.cur + 1) % n; renderTrajStock(trajState.items[trajState.cur].t); });
+  $('trajMaxBtn').addEventListener('click', toggleTrajMax);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && trajMaximized) toggleTrajMax(); });
   document.querySelectorAll('.preset[data-days]').forEach(btn => {
     btn.addEventListener('click', () => {
       const days = parseInt(btn.dataset.days);
@@ -948,6 +741,7 @@ function init() {
       apply();
     });
   });
+  setupTrajDivider();
   switchEtf(0);
 }
 
@@ -970,6 +764,7 @@ function renderAll() {
   renderStreaks();
   renderEntriesExits();
   renderHoldingsTable();
+  attachExitHoverChart();   // ⑤ 편입 · ⑥ 퇴출 · ⑦ 보유 행 호버 차트 (표 렌더 후 일괄 바인딩)
   renderHeatmap();
   renderThemes();
   renderDataQuality();
@@ -1707,8 +1502,7 @@ function renderEntriesExits() {
           </tr>`).join('')}
         </tbody></table></div>
         <p class="muted" style="margin-top:6px;">총 ${exits.length}건 · 추정 수익률 = 편입~퇴출 평가단가(value/qty) 변화율 (배당·환율 미반영). 행에 커서를 올리면 해당 기간 주가 차트가 표시됩니다.</p>`;
-
-  attachExitHoverChart();
+  // 호버 바인딩은 ⑤⑥⑦ 표가 모두 렌더된 뒤 renderAll 에서 한 번에 처리
 }
 
 // ===== 퇴출 행 호버 → 보유기간 주가(평가단가) 차트 =====
@@ -1792,8 +1586,8 @@ function attachExitHoverChart() {
     }, { displayModeBar: false, staticPlot: true });
   }
 
-  // 퇴출 행(⑥) + 신규 편입 행(⑤) 공통: 호버 시 보유 사이클 주가·추정 수익률 팝업
-  document.querySelectorAll('#exitsContainer .exit-row, #entriesContainer .hover-traj').forEach(tr => {
+  // 퇴출(⑥)·신규 편입(⑤)·보유 종목(⑦) 행 공통: 호버 시 편입~현재 주가·추정 수익률 팝업
+  document.querySelectorAll('#exitsContainer .exit-row, #entriesContainer .hover-traj, #holdingsTable tbody tr.hover-traj').forEach(tr => {
     tr.addEventListener('mouseenter', (ev) => showFor(tr, ev));
     tr.addEventListener('mousemove',  (ev) => { if (popup.style.display === 'block') position(ev); });
     tr.addEventListener('mouseleave', () => { popup.style.display = 'none'; });
@@ -1808,9 +1602,10 @@ function renderHoldingsTable() {
   const rows = ts.map(t => {
     const w1 = weightAt(t, i1), w2 = weightAt(t, i2);
     // 현재 보유 사이클(마지막 편입 이후)의 평균단가 대비 추정 수익률
-    let entryRet = null, sinceStart = false, entryDate = null;
+    let entryRet = null, sinceStart = false, entryDate = null, entryIdx = null;
     if (t !== '__CASH__') {
       const cs = cycleStartIdx(t, i2);
+      entryIdx = cs;
       sinceStart = cs === 0;
       entryDate = DATA.dates[cs];
       const basis = estimateAvgCost(t, cs, i2);
@@ -1821,7 +1616,7 @@ function renderHoldingsTable() {
       ticker: t, name: DATA.tickers[t].name, region: DATA.tickers[t].region,
       qty: qtyAt(t, i2), value: valueAt(t, i2), w2,
       delta: (w1 != null && t !== '__CASH__') ? w2 - w1 : (t === '__CASH__' && w1 != null ? w2 - w1 : null),
-      entryRet, sinceStart, entryDate,
+      entryRet, sinceStart, entryDate, entryIdx,
     };
   });
   rows.sort((a, b) => b.w2 - a.w2);
@@ -1833,7 +1628,7 @@ function renderHoldingsTable() {
       <th class="num">편입 후 추정 수익률 <span class="muted" style="font-weight:400;">ⓘ</span></th>
     </tr></thead>
     <tbody>${rows.map(r => `
-      <tr data-ticker="${escHtml(r.ticker)}">
+      <tr data-ticker="${escHtml(r.ticker)}"${r.entryIdx != null ? ` class="hover-traj" data-entry-idx="${r.entryIdx}" data-exit-idx="${i2}"` : ''}>
         <td>${escHtml(r.ticker)}</td>
         <td>${escHtml(r.name)}</td>
         <td><span class="legend-pill" style="background:${REGION_COLORS[r.region]||'#666'}">${r.region}</span></td>
@@ -1975,6 +1770,128 @@ function getActiveDaily(etf) {
 }
 
 const trajState = { items: [], cur: 0 };
+let trajMaximized = false;
+let trajSplit = 0.66;          // 위(주가) 패널이 차지하는 두 패널 합 높이의 비율 (구분선 드래그로 조절)
+let _trajSyncing = false;
+
+// 두 패널 사이 구분선 드래그 → 위/아래 높이 비율 조절 (init 에서 1회 바인딩, 요소는 정적)
+function setupTrajDivider() {
+  const div = $('trajDivider');
+  if (!div) return;
+  let dragging = false, H = 0, raf = 0, pend = null;
+  const commit = (a, b) => {
+    _trajSyncing = true;                              // 높이 변경이 X축 동기화 핸들러를 깨우지 않게
+    Promise.all([
+      Plotly.relayout('trajChart1', { height: a }),
+      Plotly.relayout('trajChart2', { height: b }),
+    ]).then(() => { _trajSyncing = false; }, () => { _trajSyncing = false; });
+  };
+  const apply = () => { raf = 0; if (pend) { const p = pend; pend = null; commit(p[0], p[1]); } };
+  const onMove = (e) => {
+    if (!dragging) return;
+    const top = $('trajChart1').getBoundingClientRect().top;
+    const a = Math.round(Math.max(220, Math.min(H - 220, e.clientY - top)));
+    trajSplit = a / H;
+    pend = [a, H - a];
+    if (!raf) raf = requestAnimationFrame(apply);    // 드래그 중 부드럽게(프레임당 1회)
+    e.preventDefault();
+  };
+  const onUp = () => {
+    if (!dragging) return;
+    dragging = false; div.classList.remove('dragging');
+    document.body.style.userSelect = '';
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    const a = Math.round(Math.max(220, Math.min(H - 220, H * trajSplit)));  // 최종 위치 확정
+    commit(a, H - a);
+  };
+  div.addEventListener('mousedown', (e) => {
+    const c1 = $('trajChart1'), c2 = $('trajChart2');
+    if (!c1.layout || !c2.layout) return;
+    H = c1.layout.height + c2.layout.height;
+    dragging = true; div.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  });
+}
+
+// 보이는 X 구간 [xr] 안의 데이터만으로 각 Y축 범위를 계산해 relayout 객체로 반환.
+// chart1 주가축은 로그(범위는 log10 단위), chart2 비중축은 0 기준 유지, 나머지는 min~max 패딩.
+function trajYUpdate(gd, xr) {
+  const out = {};
+  if (!gd || !gd.data || !gd.layout) return out;
+  const t0 = new Date(xr[0]).getTime(), t1 = new Date(xr[1]).getTime();
+  const lo = Math.min(t0, t1), hi = Math.max(t0, t1);
+  const acc = {};   // 'y' | 'y2' → {mn, mx}
+  for (const tr of gd.data) {
+    const ax = tr.yaxis === 'y2' ? 'y2' : 'y';
+    const xs = tr.x, ys = tr.y;
+    if (!xs || !ys) continue;
+    for (let i = 0; i < xs.length; i++) {
+      const y = ys[i];
+      if (y == null || !isFinite(y)) continue;
+      const tx = new Date(xs[i]).getTime();
+      if (tx < lo || tx > hi) continue;
+      const a = acc[ax] || (acc[ax] = { mn: Infinity, mx: -Infinity });
+      if (y < a.mn) a.mn = y;
+      if (y > a.mx) a.mx = y;
+    }
+  }
+  const isC1 = gd.id === 'trajChart1';
+  const isLog = isC1 && gd.layout.yaxis && gd.layout.yaxis.type === 'log';
+  if (acc.y && isFinite(acc.y.mn) && isFinite(acc.y.mx)) {
+    const { mn, mx } = acc.y;
+    if (isLog && mn > 0) {
+      const l0 = Math.log10(mn), l1 = Math.log10(mx), p = Math.max((l1 - l0) * 0.06, 0.012);
+      out['yaxis.range'] = [l0 - p, l1 + p];
+    } else if (!isC1) {                       // chart2 비중: 0 기준선 유지(영역 채우기용)
+      out['yaxis.range'] = [0, mx * 1.06 || 1];
+    } else {
+      const sp = (mx - mn) || Math.abs(mx) || 1;
+      out['yaxis.range'] = [mn - sp * 0.08, mx + sp * 0.08];
+    }
+  }
+  if (acc.y2 && isFinite(acc.y2.mn) && isFinite(acc.y2.mx)) {
+    const { mn, mx } = acc.y2;
+    const sp = (mx - mn) || Math.abs(mx) || 1;
+    out['yaxis2.range'] = [mn - sp * 0.08, mx + sp * 0.08];
+  }
+  return out;
+}
+
+// 두 차트 X축 동기화 + Y축 오토스케일: 한쪽(하단 기간 슬라이더 / 박스줌 / 더블클릭 리셋)에서
+// 범위가 바뀌면 다른 쪽 X도 맞추고, 양쪽 Y축을 '현재 보이는 기간'의 데이터에 맞게 다시 스케일한다.
+function attachTrajSync() {
+  const g1 = $('trajChart1'), g2 = $('trajChart2');
+  if (!g1 || !g2 || !g1.on || !g2.on) return;
+  const sync = (src, dst) => () => {
+    if (_trajSyncing) return;
+    const r = src.layout && src.layout.xaxis && src.layout.xaxis.range;
+    if (!r) return;
+    _trajSyncing = true;
+    const srcU = trajYUpdate(src, r);
+    const dstU = Object.assign({ 'xaxis.range': [r[0], r[1]], 'xaxis.autorange': false }, trajYUpdate(dst, r));
+    Promise.all([
+      Object.keys(srcU).length ? Plotly.relayout(src, srcU) : Promise.resolve(),
+      Plotly.relayout(dst, dstU),
+    ]).then(() => { _trajSyncing = false; }, () => { _trajSyncing = false; });
+  };
+  if (g1.removeAllListeners) g1.removeAllListeners('plotly_relayout');
+  if (g2.removeAllListeners) g2.removeAllListeners('plotly_relayout');
+  g1.on('plotly_relayout', sync(g1, g2));
+  g2.on('plotly_relayout', sync(g2, g1));
+}
+
+function toggleTrajMax() {
+  const sec = $('trajSection');
+  trajMaximized = !sec.classList.contains('traj-maximized');
+  sec.classList.toggle('traj-maximized', trajMaximized);
+  $('trajMaxBtn').textContent = trajMaximized ? '✕ 닫기' : '⛶ 최대화';
+  if (trajState.items.length) renderTrajStock(trajState.items[trajState.cur].t);  // 새 크기로 재렌더
+}
 
 function trajForCurrentEtf() {
   if (!window.TRAJ_DATA || !TRAJ_DATA.etfs) return null;
@@ -2060,6 +1977,16 @@ function renderTrajStock(t) {
 
   const validPx = price.filter(p => p != null);
   const logok = validPx.length > 0 && validPx.every(p => p > 0);
+  // 두 차트 X축 정렬: 동일 여백 + 동일 명시 범위(막대 자동패딩 차이까지 제거)
+  const TRAJ_M = { l: 66, r: 60, t: 36, b: 56 };
+  const _a = new Date(dates[0]).getTime(), _b = new Date(dates[dates.length - 1]).getTime();
+  const _pad = Math.max((_b - _a) * 0.015, 864e5);
+  const xr = [new Date(_a - _pad).toISOString(), new Date(_b + _pad).toISOString()];
+  // 두 패널 합 높이 H를 trajSplit 비율로 분배 (구분선 드래그로 조절)
+  const H = trajMaximized ? Math.max(1060, Math.round(window.innerHeight * 0.92)) : 1060;
+  let h1 = Math.round(H * trajSplit);
+  h1 = Math.max(220, Math.min(H - 220, h1));     // 각 패널 최소 220px (하단 기간 슬라이더 공간 확보)
+  const h2 = H - h1;
   Plotly.newPlot('trajChart1', [
     { x: dates, y: price, name: `주가 (${ccy})`, type: 'scatter', mode: 'lines', line: { color: '#444', width: 1.5 }, connectgaps: true, yaxis: 'y', hovertemplate: `주가 ${sym}%{y:,.2f}<extra></extra>` },
     { x: dates, y: avg, name: '추정 평균단가', type: 'scatter', mode: 'lines', line: { color: '#f5b301', width: 1.8, dash: 'dash' }, connectgaps: true, yaxis: 'y', hovertemplate: `평균단가 ${sym}%{y:,.2f}<extra></extra>` },
@@ -2068,7 +1995,8 @@ function renderTrajStock(t) {
     { x: dates, y: sellPx, name: '능동 매도', type: 'scatter', mode: 'markers', yaxis: 'y', marker: { color: 'rgba(239,68,68,.5)', line: { color: '#dc2626', width: 1 }, size: sellSize }, customdata: sell, hovertemplate: '능동 매도 -%{customdata:.2f}%p<extra></extra>' },
   ], {
     title: { text: '주가 · 추정 평균단가 · 평가손익률 + 능동 매수/매도 (점이 클수록 큰 매매)', font: { size: 13 } },
-    height: 430, margin: { l: 66, r: 60, t: 36, b: 56 },
+    height: h1, margin: TRAJ_M,
+    xaxis: { range: xr, autorange: false },
     yaxis: { title: `주가 ${sym}${logok ? ' (로그)' : ''}`, type: logok ? 'log' : 'linear' },
     yaxis2: { title: '평가손익률 %', overlaying: 'y', side: 'right', showgrid: false, zeroline: false },
     legend: { orientation: 'h', y: -0.18, font: { size: 11 } },
@@ -2081,12 +2009,14 @@ function renderTrajStock(t) {
     { x: dates, y: sell.map(s => s != null ? -s : null), name: '능동 매도', type: 'bar', marker: { color: '#ef4444' }, yaxis: 'y2', hovertemplate: '능동 매도 %{y:.2f}%p<extra></extra>' },
   ], {
     title: { text: '펀드 내 비중 변화 + 능동 매매 (%p)', font: { size: 13 } },
-    height: 320, margin: { l: 56, r: 60, t: 36, b: 56 },
-    yaxis: { title: '비중 %', rangemode: 'tozero' },
-    yaxis2: { title: '능동 %p', overlaying: 'y', side: 'right', showgrid: false, zeroline: true },
+    height: h2, margin: TRAJ_M,
+    xaxis: { range: xr, autorange: false,
+             rangeslider: { visible: true, thickness: 0.1, bgcolor: '#eef1f5', bordercolor: '#c7ccd4', borderwidth: 1 } },
+    yaxis: { title: '비중 %', rangemode: 'tozero', fixedrange: true },
+    yaxis2: { title: '능동 %p', overlaying: 'y', side: 'right', showgrid: false, zeroline: true, fixedrange: true },
     legend: { orientation: 'h', y: -0.2, font: { size: 11 } },
     hovermode: 'x unified', barmode: 'relative',
-  }, { responsive: true, displayModeBar: false });
+  }, { responsive: true, displayModeBar: false }).then(attachTrajSync);
 }
 
 // ===== ⑨ Heatmap =====
