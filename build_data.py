@@ -265,9 +265,29 @@ def decompose_active(dates, by_date):
     act   = {}                 # ticker → [[i, aw], ...]
     splits = []
 
-    snaps = []                 # 날짜별 {ticker: (qty, value)}
-    for ds in dates:
-        snaps.append({h["ticker"]: (h["qty"], h["value"]) for h in by_date[ds]})
+    # 소스 평가금액 1일 글리치 보정(median-3): 분할일 수량만 조정되고 평가금액은 미조정되어
+    # 하루만 ~20배로 튀었다 복귀하는 등의 오류를, 양 이웃보다 3배↑/0.34배↓로 튄 값을 세 값의
+    # 중앙값으로 치환해 정상화한다. 현금·지수선물(주식수 기반 매매 대상 아님)은 제외.
+    def _is_base(t):
+        return t == "__CASH__" or "CASH" in t.upper() or re.search(r"\sINDEX$", t, re.I)
+
+    val_series = {}            # ticker → [value per date or None]
+    for i, ds in enumerate(dates):
+        for h in by_date[ds]:
+            val_series.setdefault(h["ticker"], [None] * n)[i] = h["value"]
+    for t, arr in val_series.items():
+        if _is_base(t):
+            continue
+        for i in range(1, n - 1):
+            a, b, d = arr[i - 1], arr[i], arr[i + 1]
+            if a and b and d and a > 0 and d > 0:
+                r1, r2 = b / a, b / d
+                if (r1 > 3 and r2 > 3) or (r1 < 0.34 and r2 < 0.34):
+                    arr[i] = sorted([a, b, d])[1]
+
+    snaps = []                 # 날짜별 {ticker: (qty, value)} — value 는 글리치 보정본
+    for i, ds in enumerate(dates):
+        snaps.append({h["ticker"]: (h["qty"], val_series[h["ticker"]][i]) for h in by_date[ds]})
 
     for i, ds in enumerate(dates):
         s = sum(v for _, v in snaps[i].values() if v is not None and v > 0)

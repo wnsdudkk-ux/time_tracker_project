@@ -223,7 +223,7 @@ section#trajSection.traj-maximized .desc { display: none; }
   <section>
     <h2>① 비중 변화 추이</h2>
     <p class="desc">
-      기간 종료일 기준 상위 10종목 (현금 제외). 범례 클릭으로 종목 토글.<br>
+      기간 양 끝점에 모두 보유한 종목 중 능동 비중변화(매매)가 컸던 상위 10 (|Σ능동Δ| 내림차순 · 가격효과 제거). ② Top Movers와 같은 기준 — 신규 편입·전량 청산은 ②의 별도 카테고리 참고. 범례 클릭으로 종목 토글.<br>
       <b>능동 Δ비중 누적</b> = "어제 포트폴리오를 그대로 들고 무거래였다면"의 가상 비중 대비 실제 비중의 차이를 일별로 분해해 누적한 값 (%p).
       주가·환율·설정환매로 인한 변화가 제거되어 <b>운용역의 매매만</b> 남습니다. Net 변화는 가격 효과가 섞인 단순 비중 차이(참고용).<br>
       <b>1종목만 활성화하면 → 그 종목의 주가(₩, 평가단가) 차트가 우측 축에 자동 오버레이</b> (매매-주가 타이밍 확인용). 2종목 이상 활성 시 자동 해제.
@@ -1064,9 +1064,16 @@ function renderWeightChart() {
   const mode = (document.querySelector('input[name="weightMode"]:checked') || {}).value || 'act';
   const i1 = state.i1, i2 = state.i2;
   const dates = activeDates();
-  const ts = tickersAt(i2).filter(t => t !== '__CASH__');
-  ts.sort((a, b) => weightAt(b, i2) - weightAt(a, i2));
-  const top = ts.slice(0, 10);
+  // ② Top Movers 와 동일 기준으로 일관성 유지: 기간 양 끝점에 모두 보유한 종목 중
+  // |Σ능동Δ| 상위 10 (가격효과 제거, 매수·매도 모두). 신규 편입·전량 청산은 ②의 별도
+  // 카테고리에서 다루므로 여기서도 제외 → 여기 나온 종목은 모두 ② 랭킹에도 등장한다.
+  const top = Object.keys(DATA.series)
+    .filter(t => t !== '__CASH__' && weightAt(t, i1) != null && weightAt(t, i2) != null)
+    .map(t => ({ t, a: Math.abs(activeDelta(t, i1, i2)) }))
+    .filter(x => x.a > 0)
+    .sort((x, y) => y.a - x.a)
+    .slice(0, 10)
+    .map(x => x.t);
 
   let yTitle, getY, hoverFmt, valSuffix;
   if (mode === 'act') {
@@ -1995,11 +2002,12 @@ function renderTrajStock(t) {
     { x: dates, y: sellPx, name: '능동 매도', type: 'scatter', mode: 'markers', yaxis: 'y', marker: { color: 'rgba(239,68,68,.5)', line: { color: '#dc2626', width: 1 }, size: sellSize }, customdata: sell, hovertemplate: '능동 매도 -%{customdata:.2f}%p<extra></extra>' },
   ], {
     title: { text: '주가 · 추정 평균단가 · 평가손익률 + 능동 매수/매도 (점이 클수록 큰 매매)', font: { size: 13 } },
-    height: h1, margin: TRAJ_M,
-    xaxis: { range: xr, autorange: false },
+    height: h1, margin: { l: 66, r: 60, t: 36, b: 104 },   // 하단에 레인지슬라이더+범례 공간 (l/r은 TRAJ_M과 동일 → X정렬 유지)
+    xaxis: { range: xr, autorange: false,
+             rangeslider: { visible: true, thickness: 0.08, bgcolor: '#eef1f5', bordercolor: '#c7ccd4', borderwidth: 1 } },
     yaxis: { title: `주가 ${sym}${logok ? ' (로그)' : ''}`, type: logok ? 'log' : 'linear' },
     yaxis2: { title: '평가손익률 %', overlaying: 'y', side: 'right', showgrid: false, zeroline: false },
-    legend: { orientation: 'h', y: -0.18, font: { size: 11 } },
+    legend: { orientation: 'h', y: -0.42, font: { size: 11 } },
     hovermode: 'x unified',
   }, { responsive: true, displayModeBar: false });
 
@@ -2010,8 +2018,7 @@ function renderTrajStock(t) {
   ], {
     title: { text: '펀드 내 비중 변화 + 능동 매매 (%p)', font: { size: 13 } },
     height: h2, margin: TRAJ_M,
-    xaxis: { range: xr, autorange: false,
-             rangeslider: { visible: true, thickness: 0.1, bgcolor: '#eef1f5', bordercolor: '#c7ccd4', borderwidth: 1 } },
+    xaxis: { range: xr, autorange: false },
     yaxis: { title: '비중 %', rangemode: 'tozero', fixedrange: true },
     yaxis2: { title: '능동 %p', overlaying: 'y', side: 'right', showgrid: false, zeroline: true, fixedrange: true },
     legend: { orientation: 'h', y: -0.2, font: { size: 11 } },
